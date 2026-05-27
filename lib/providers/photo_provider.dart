@@ -1,5 +1,8 @@
 import 'dart:async';
+import 'dart:io';
+import 'dart:typed_data';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:exif/exif.dart';
 import 'package:photo_manager/photo_manager.dart';
 import '../services/photo_service.dart';
 
@@ -9,12 +12,18 @@ class RandomPhotoState {
   final bool isLoading;
   final String? errorMessage;
   final bool hasPermission;
+  final Uint8List? preloadedThumbnail;
+  final File? preloadedFile;
+  final Map<String, IfdTag>? preloadedExif;
 
   const RandomPhotoState({
     this.photo,
     this.isLoading = false,
     this.errorMessage,
     this.hasPermission = false,
+    this.preloadedThumbnail,
+    this.preloadedFile,
+    this.preloadedExif,
   });
 
   RandomPhotoState copyWith({
@@ -22,12 +31,19 @@ class RandomPhotoState {
     bool? isLoading,
     String? errorMessage,
     bool? hasPermission,
+    Uint8List? preloadedThumbnail,
+    File? preloadedFile,
+    Map<String, IfdTag>? preloadedExif,
+    bool clearPreload = false,
   }) {
     return RandomPhotoState(
       photo: photo ?? this.photo,
       isLoading: isLoading ?? this.isLoading,
       errorMessage: errorMessage,
       hasPermission: hasPermission ?? this.hasPermission,
+      preloadedThumbnail: clearPreload ? null : (preloadedThumbnail ?? this.preloadedThumbnail),
+      preloadedFile: clearPreload ? null : (preloadedFile ?? this.preloadedFile),
+      preloadedExif: clearPreload ? null : (preloadedExif ?? this.preloadedExif),
     );
   }
 }
@@ -69,9 +85,52 @@ class PhotoProvider extends AsyncNotifier<RandomPhotoState> {
   }
 
   /// 刷新：重新随机选取一张照片
+  ///
+  /// 不设置 AsyncLoading，保持当前照片可见直到新照片就绪，
+  /// 避免闪烁 loading 转圈。换图后立即后台预加载详情信息。
   Future<void> refresh() async {
-    state = const AsyncLoading();
-    state = AsyncData(await _loadRandomPhoto());
+    final next = await _loadRandomPhoto();
+    state = AsyncData(next);
+
+    // 后台预加载缩略图、文件、EXIF，供详情面板直接使用
+    final photo = next.photo;
+    if (photo != null) {
+      final thumbFuture = photo.thumbnailDataWithSize(
+        const ThumbnailSize(320, 320),
+        quality: 90,
+      );
+      final fileFuture = photo.file;
+      final results = await Future.wait([thumbFuture, fileFuture]);
+      final thumb = results[0] as Uint8List?;
+      final file = results[1] as File?;
+
+      // 有文件后再读取 EXIF
+      Map<String, IfdTag>? exif;
+      if (file != null) {
+        try {
+          exif = await readExifFromFile(file);
+        } catch (_) {}
+      }
+
+      state = AsyncData(next.copyWith(
+        preloadedThumbnail: thumb,
+        preloadedFile: file,
+        preloadedExif: exif,
+      ));
+    }
+  }
+
+  /// 删除当前照片，刷新到下一张
+  Future<bool> deleteCurrentPhoto() async {
+    final current = state.asData?.value.photo;
+    if (current == null) return false;
+
+    final success = await _photoService.deletePhoto(current);
+    if (success) {
+      // 删除成功后跳到下一张
+      refresh();
+    }
+    return success;
   }
 
   /// 重新请求权限（用户从设置返回后调用）

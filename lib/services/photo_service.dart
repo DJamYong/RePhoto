@@ -57,6 +57,16 @@ class PhotoService {
     return entities.first;
   }
 
+  /// 删除指定照片（从设备相册中彻底移除）
+  Future<bool> deletePhoto(AssetEntity photo) async {
+    try {
+      final result = await PhotoManager.editor.deleteWithIds([photo.id]);
+      return result.isNotEmpty;
+    } catch (_) {
+      return false;
+    }
+  }
+
   /// 获取相册中的照片总数（用于判断是否有照片可展示）
   Future<int> getPhotoCount() async {
     final albums = await PhotoManager.getAssetPathList(
