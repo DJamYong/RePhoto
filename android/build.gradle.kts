@@ -1,5 +1,8 @@
 allprojects {
     repositories {
+        maven { url = uri("https://mirrors.sjtug.sjtu.edu.cn/flutter/download.flutter.io") }
+        maven { url = uri("https://maven.aliyun.com/repository/google") }
+        maven { url = uri("https://maven.aliyun.com/repository/public") }
         google()
         mavenCentral()
     }
@@ -22,3 +25,4 @@ subprojects {
 tasks.register<Delete>("clean") {
     delete(rootProject.layout.buildDirectory)
 }
+

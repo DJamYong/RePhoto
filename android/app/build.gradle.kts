@@ -6,7 +6,8 @@ plugins {
 
 android {
     namespace = "com.rephoto.rephoto"
-    compileSdk = flutter.compileSdkVersion
+    // photo_manager 需要 36+
+    compileSdk = 36
     ndkVersion = flutter.ndkVersion
 
     compileOptions {
