@@ -168,8 +168,26 @@ class _SlidingPanelState extends State<_SlidingPanel>
           final progress = _ctrl.value;
           return Stack(
             children: [
-              // 主内容
-              Positioned.fill(child: child!),
+              // 主内容 — 支持右滑打开详情面板
+              Positioned.fill(
+                child: GestureDetector(
+                  onHorizontalDragUpdate: (details) {
+                    final delta = details.primaryDelta ?? 0;
+                    final newValue =
+                        (_ctrl.value + delta / panelWidth).clamp(0.0, 1.0);
+                    _ctrl.value = newValue;
+                  },
+                  onHorizontalDragEnd: (details) {
+                    if (_ctrl.value > 0.3 ||
+                        (details.primaryVelocity ?? 0) > 300) {
+                      open();
+                    } else {
+                      close();
+                    }
+                  },
+                  child: child!,
+                ),
+              ),
 
               // 半透明遮罩
               if (progress > 0.005)
@@ -182,14 +200,30 @@ class _SlidingPanelState extends State<_SlidingPanel>
                   ),
                 ),
 
-              // 滑出面板
+              // 滑出面板 — 支持左滑关闭
               Transform.translate(
                 offset: Offset(-panelWidth * (1 - progress), 0),
-                child: SizedBox(
-                  width: panelWidth,
-                  child: _PanelBody(
-                    photoAsync: widget.photoAsync,
-                    panelContentBuilder: widget.panelContentBuilder,
+                child: GestureDetector(
+                  onHorizontalDragUpdate: (details) {
+                    final delta = details.primaryDelta ?? 0;
+                    final newValue =
+                        (_ctrl.value + delta / panelWidth).clamp(0.0, 1.0);
+                    _ctrl.value = newValue;
+                  },
+                  onHorizontalDragEnd: (details) {
+                    if (_ctrl.value > 0.3 &&
+                        (details.primaryVelocity ?? 0) > -300) {
+                      open();
+                    } else {
+                      close();
+                    }
+                  },
+                  child: SizedBox(
+                    width: panelWidth,
+                    child: _PanelBody(
+                      photoAsync: widget.photoAsync,
+                      panelContentBuilder: widget.panelContentBuilder,
+                    ),
                   ),
                 ),
               ),
@@ -844,8 +878,6 @@ class _DrawerContent extends StatelessWidget {
                       _buildTile(Icons.category_outlined, '资源类型', _formatAssetType(photo.type), colorScheme),
                       _divider(colorScheme),
                       _buildTile(Icons.folder_outlined, '路径', photo.relativePath ?? '未知', colorScheme),
-                      _divider(colorScheme),
-                      _buildTile(Icons.screen_rotation_outlined, '方向', _formatOrientation(photo.orientation), colorScheme),
                       if (photo.type == AssetType.video && photo.duration > 0) ...[
                         _divider(colorScheme),
                         _buildTile(Icons.timer_outlined, '时长', _formatVideoDuration(Duration(seconds: photo.duration)), colorScheme),
@@ -941,16 +973,6 @@ class _DrawerContent extends StatelessWidget {
       case AssetType.video: return '视频';
       case AssetType.audio: return '音频';
       case AssetType.other: return '其他';
-    }
-  }
-
-  String _formatOrientation(int orientation) {
-    switch (orientation) {
-      case 1: return '正常 (0°)';
-      case 3: return '旋转 180°';
-      case 6: return '顺时针旋转 90°';
-      case 8: return '逆时针旋转 90°';
-      default: return '方向码 $orientation';
     }
   }
 
