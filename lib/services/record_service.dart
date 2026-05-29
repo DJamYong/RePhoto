@@ -1,0 +1,64 @@
+import '../models/record.dart';
+import 'database_service.dart';
+
+/// 照片记录 DAO
+class RecordService {
+  static const _table = 'records';
+
+  /// 获取某张照片的所有记录，按创建时间倒序
+  static Future<List<Record>> getByPhotoId(String photoId) async {
+    final rows = await DatabaseService.db.query(
+      _table,
+      where: 'photo_id = ?',
+      whereArgs: [photoId],
+      orderBy: 'created_at DESC',
+    );
+    return rows.map(Record.fromMap).toList();
+  }
+
+  /// 获取单条记录
+  static Future<Record?> getById(int id) async {
+    final rows = await DatabaseService.db.query(
+      _table,
+      where: 'id = ?',
+      whereArgs: [id],
+      limit: 1,
+    );
+    if (rows.isEmpty) return null;
+    return Record.fromMap(rows.first);
+  }
+
+  /// 创建新记录
+  static Future<int> create(Record record) async {
+    return await DatabaseService.db.insert(_table, record.toMap());
+  }
+
+  /// 更新记录内容
+  static Future<int> update(Record record) async {
+    return await DatabaseService.db.update(
+      _table,
+      record.toMap(),
+      where: 'id = ?',
+      whereArgs: [record.id],
+    );
+  }
+
+  /// 删除记录
+  static Future<int> delete(int id) async {
+    return await DatabaseService.db.delete(
+      _table,
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+  }
+
+  /// 获取所有记录（按更新时间倒序）
+  static Future<List<Record>> getAll({int? limit}) async {
+    final rows = await DatabaseService.db.query(
+      _table,
+      orderBy: 'updated_at DESC',
+      limit: limit,
+    );
+    return rows.map(Record.fromMap).toList();
+  }
+}

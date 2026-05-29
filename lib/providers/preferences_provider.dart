@@ -1,4 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'theme_provider.dart';
 
 /// 主页照片信息显示偏好
 class PhotoDisplayPrefs {
@@ -25,13 +26,27 @@ class PhotoDisplayPrefs {
 
 /// 照片信息显示偏好 Notifier
 class PhotoDisplayPrefsNotifier extends Notifier<PhotoDisplayPrefs> {
-  @override
-  PhotoDisplayPrefs build() => const PhotoDisplayPrefs();
+  static const _keyShowDate = 'photo_showDate';
+  static const _keyShowTitle = 'photo_showTitle';
 
-  void setShowDate(bool value) =>
-      state = state.copyWith(showDate: value);
-  void setShowTitle(bool value) =>
-      state = state.copyWith(showTitle: value);
+  @override
+  PhotoDisplayPrefs build() {
+    final prefs = ref.watch(sharedPrefsProvider);
+    return PhotoDisplayPrefs(
+      showDate: prefs.getBool(_keyShowDate) ?? true,
+      showTitle: prefs.getBool(_keyShowTitle) ?? false,
+    );
+  }
+
+  void setShowDate(bool value) {
+    state = state.copyWith(showDate: value);
+    ref.read(sharedPrefsProvider).setBool(_keyShowDate, value);
+  }
+
+  void setShowTitle(bool value) {
+    state = state.copyWith(showTitle: value);
+    ref.read(sharedPrefsProvider).setBool(_keyShowTitle, value);
+  }
 }
 
 /// 照片信息显示偏好 Provider

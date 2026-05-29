@@ -6,6 +6,8 @@ import 'package:exif/exif.dart';
 import 'package:photo_manager/photo_manager.dart';
 import '../providers/photo_provider.dart';
 import '../providers/preferences_provider.dart';
+import '../models/record.dart';
+import '../services/record_service.dart';
 import 'photo_fullscreen_page.dart';
 import 'settings_page.dart';
 
@@ -26,6 +28,7 @@ class HomePage extends ConsumerWidget {
       ),
       photoAsync: stateAsync,
       child: Scaffold(
+        resizeToAvoidBottomInset: false,
         appBar: AppBar(
           leading: Builder(
             builder: (context) => IconButton(
@@ -418,10 +421,20 @@ class _ErrorView extends StatelessWidget {
 //  照片相册视图 — 拍立得风格
 // ═══════════════════════════════════════
 
-class _PhotoAlbumView extends StatelessWidget {
+class _PhotoAlbumView extends StatefulWidget {
   final AssetEntity photo;
   final WidgetRef ref;
   const _PhotoAlbumView({required this.photo, required this.ref});
+
+  @override
+  State<_PhotoAlbumView> createState() => _PhotoAlbumViewState();
+}
+
+class _PhotoAlbumViewState extends State<_PhotoAlbumView> {
+  int _recordRefreshKey = 0;
+
+  AssetEntity get photo => widget.photo;
+  WidgetRef get ref => widget.ref;
 
   @override
   Widget build(BuildContext context) {
@@ -511,6 +524,56 @@ class _PhotoAlbumView extends StatelessWidget {
               ),
             ),
 
+            // 记录按钮 + 全部记录（如有）
+            Padding(
+              padding: const EdgeInsets.fromLTRB(0, 0, 0, 12),
+              child: FutureBuilder<List<Record>>(
+                key: ValueKey('records_$_recordRefreshKey'),
+                future: RecordService.getByPhotoId(photo.id),
+                builder: (context, snapshot) {
+                  final records = snapshot.data ?? [];
+                  return Center(
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        SizedBox(
+                          width: 44,
+                          height: 44,
+                          child: IconButton(
+                            onPressed: () => _showRecordDialog(context, photo, cs),
+                            icon: const Icon(Icons.edit_note_outlined, size: 22),
+                            tooltip: '添加记录',
+                            style: IconButton.styleFrom(
+                              foregroundColor: cs.primary,
+                              backgroundColor: cs.primary.withValues(alpha: 0.1),
+                              shape: const CircleBorder(),
+                            ),
+                          ),
+                        ),
+                        if (records.isNotEmpty) ...[
+                          const SizedBox(width: 16),
+                          SizedBox(
+                            width: 44,
+                            height: 44,
+                            child: IconButton(
+                              onPressed: () => _showRecordsListDialog(context, records, cs),
+                              icon: const Icon(Icons.list_alt_outlined, size: 22),
+                              tooltip: '全部记录 (${records.length})',
+                              style: IconButton.styleFrom(
+                                foregroundColor: cs.primary,
+                                backgroundColor: cs.primary.withValues(alpha: 0.1),
+                                shape: const CircleBorder(),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  );
+                },
+              ),
+            ),
+
             // 底部按钮区
             Padding(
               padding: const EdgeInsets.fromLTRB(24, 4, 24, 24),
@@ -540,6 +603,523 @@ class _PhotoAlbumView extends StatelessWidget {
       ),
     );
   }
+
+  /// 弹出记录表单（新增或编辑），返回时表单已关闭
+  Future<void> _showRecordDialog(
+      BuildContext context, AssetEntity photo, ColorScheme cs, {Record? editRecord}) async {
+    final isEditing = editRecord != null;
+    final contentCtrl = TextEditingController(text: editRecord?.content ?? '');
+    final moodCtrl = TextEditingController(text: editRecord?.mood ?? '');
+    final formKey = GlobalKey<FormState>();
+
+    int? selectedColor = editRecord?.color;
+
+    await showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          title: Row(
+            children: [
+              Icon(isEditing ? Icons.edit_outlined : Icons.edit_note_outlined,
+                  size: 20, color: cs.primary),
+              const SizedBox(width: 8),
+              Text(isEditing ? '编辑记录' : '新增记录',
+                  style: const TextStyle(fontSize: 17)),
+            ],
+          ),
+          content: SingleChildScrollView(
+            child: Form(
+              key: formKey,
+              child: SizedBox(
+                width: double.maxFinite,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    TextFormField(
+                      controller: contentCtrl,
+                      decoration: const InputDecoration(
+                        labelText: '记录内容',
+                        hintText: '写下此刻的感受…',
+                        border: OutlineInputBorder(),
+                        alignLabelWithHint: true,
+                      ),
+                      maxLines: 4,
+                      minLines: 3,
+                      validator: (v) =>
+                          (v == null || v.trim().isEmpty) ? '请输入记录内容' : null,
+                    ),
+                    const SizedBox(height: 16),
+                    TextFormField(
+                      controller: moodCtrl,
+                      decoration: const InputDecoration(
+                        labelText: '心情（可选）',
+                        hintText: '例如：开心、😊、怀念…',
+                        border: OutlineInputBorder(),
+                        prefixIcon: Icon(Icons.mood_outlined),
+                        counterText: '',
+                      ),
+                      maxLines: 1,
+                      maxLength: 12,
+                    ),
+                    const SizedBox(height: 16),
+                    // 颜色选择
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        '标签颜色',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: cs.onSurfaceVariant.withValues(alpha: 0.7),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 10,
+                      runSpacing: 8,
+                      children: RecordColors.all.map((c) {
+                        final isSelected = selectedColor == c;
+                        return GestureDetector(
+                          onTap: () => setDialogState(() => selectedColor = c),
+                          child: Container(
+                            width: 32,
+                            height: 32,
+                            decoration: BoxDecoration(
+                              color: c != null ? Color(c) : Colors.transparent,
+                              shape: BoxShape.circle,
+                              border: Border.all(
+                                color: isSelected
+                                    ? cs.primary
+                                    : cs.outlineVariant.withValues(alpha: 0.3),
+                                width: isSelected ? 2.5 : 1.5,
+                              ),
+                              // 无色选项显示斜线示意
+                            ),
+                            child: c == null
+                                ? Icon(Icons.close, size: 14,
+                                    color: cs.onSurfaceVariant.withValues(alpha: 0.4))
+                                : (isSelected
+                                    ? Icon(Icons.check, size: 16, color: Colors.white)
+                                    : null),
+                          ),
+                        );
+                      }).toList(),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () async {
+              if (!formKey.currentState!.validate()) return;
+              final now = DateTime.now();
+              final Record record;
+              if (isEditing) {
+                final moodValue =
+                    moodCtrl.text.trim().isEmpty ? null : moodCtrl.text.trim();
+                record = Record(
+                  id: editRecord.id,
+                  photoId: editRecord.photoId,
+                  content: contentCtrl.text.trim(),
+                  mood: moodValue,
+                  color: selectedColor,
+                  createdAt: editRecord.createdAt,
+                  updatedAt: DateTime.now(),
+                );
+              } else {
+                record = Record(
+                  photoId: photo.id,
+                  content: contentCtrl.text.trim(),
+                  mood: moodCtrl.text.trim().isEmpty ? null : moodCtrl.text.trim(),
+                  color: selectedColor,
+                  createdAt: now,
+                  updatedAt: now,
+                );
+              }
+              try {
+                if (isEditing) {
+                  await RecordService.update(record);
+                } else {
+                  await RecordService.create(record);
+                }
+                if (ctx.mounted) {
+                  Navigator.of(ctx).pop();
+                }
+                if (mounted) {
+                  setState(() => _recordRefreshKey++);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.check_circle, size: 18, color: cs.onPrimary),
+                          const SizedBox(width: 8),
+                          const Text('记录已保存'),
+                        ],
+                      ),
+                      duration: const Duration(seconds: 2),
+                      behavior: SnackBarBehavior.floating,
+                      margin: const EdgeInsets.symmetric(horizontal: 60, vertical: 12),
+                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(24),
+                      ),
+                      backgroundColor: cs.primary,
+                    ),
+                  );
+                }
+              } catch (e) {
+                if (ctx.mounted) {
+                  ScaffoldMessenger.of(ctx).showSnackBar(
+                    SnackBar(content: Text('保存失败：$e')),
+                  );
+                }
+              }
+            },
+            child: const Text('保存'),
+          ),
+        ],
+      ),
+    ),
+  );
+  }
+
+  /// 弹出全部记录列表
+  void _showRecordsListDialog(
+      BuildContext context, List<Record> records, ColorScheme cs) {
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) {
+          return AlertDialog(
+            title: Row(
+              children: [
+                Icon(Icons.list_alt_outlined, size: 20, color: cs.primary),
+                const SizedBox(width: 8),
+                Text('全部记录 (${records.length})',
+                    style: const TextStyle(fontSize: 17)),
+              ],
+            ),
+            content: SizedBox(
+              width: double.maxFinite,
+              child: ListView.builder(
+                shrinkWrap: true,
+                itemCount: records.length,
+                itemBuilder: (context, index) {
+                  final record = records[index];
+                  return _RecordTile(
+                    record: record,
+                    colorScheme: cs,
+                    onEdited: () async {
+                      await _showRecordDialog(context, photo, cs, editRecord: record);
+                      final updated = await RecordService.getByPhotoId(photo.id);
+                      setDialogState(() {
+                        records
+                          ..clear()
+                          ..addAll(updated);
+                      });
+                    },
+                    onDeleted: () {
+                      RecordService.delete(record.id!);
+                      setDialogState(() {
+                        records.removeAt(index);
+                      });
+                      setState(() => _recordRefreshKey++);
+                    },
+                  );
+                },
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(ctx).pop(),
+                child: const Text('关闭'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+}
+
+/// 记录列表中的单条记录瓦片（可展开，长按弹出操作菜单）
+class _RecordTile extends StatefulWidget {
+  final Record record;
+  final ColorScheme colorScheme;
+  final VoidCallback? onDeleted;
+  final VoidCallback? onEdited;
+
+  const _RecordTile({
+    required this.record,
+    required this.colorScheme,
+    this.onDeleted,
+    this.onEdited,
+  });
+
+  @override
+  State<_RecordTile> createState() => _RecordTileState();
+}
+
+class _RecordTileState extends State<_RecordTile> {
+  bool _expanded = false;
+
+  String _formatDate(DateTime dt) {
+    return '${dt.year}-${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')} '
+        '${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
+  }
+
+  void _showPopupMenu() {
+    final RenderBox box = context.findRenderObject() as RenderBox;
+    final Offset offset = box.localToGlobal(Offset.zero);
+    final double tileWidth = box.size.width;
+    final double popupWidth = 180;
+
+    // 计算弹出位置：气泡底部（含箭头尖）对齐条目上边缘
+    final double left = offset.dx + (tileWidth - popupWidth) / 2;
+
+    final overlay = Overlay.of(context);
+    OverlayEntry? entry;
+
+    entry = OverlayEntry(
+      builder: (ctx) => Stack(
+        children: [
+          // 透明遮罩，点击关闭
+          Positioned.fill(
+            child: GestureDetector(
+              onTap: () => entry?.remove(),
+              child: Container(color: Colors.transparent),
+            ),
+          ),
+          // 气泡菜单（底部对齐条目顶部，自由向上生长）
+          // 若上方空间不足（<160px）则显示在条目下方
+          Positioned(
+            left: left.clamp(8, MediaQuery.of(ctx).size.width - popupWidth - 8),
+            bottom: offset.dy > 160
+                ? MediaQuery.of(ctx).size.height - offset.dy - 2
+                : null,
+            top: offset.dy > 160 ? null : offset.dy + box.size.height + 4,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // 气泡主体（带阴影和圆角）
+                Material(
+                  elevation: 8,
+                  shadowColor: Colors.black26,
+                  borderRadius: BorderRadius.circular(14),
+                  child: Container(
+                    width: popupWidth,
+                    decoration: BoxDecoration(
+                      color: Theme.of(ctx).colorScheme.surface,
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        // 编辑
+                        InkWell(
+                          borderRadius: const BorderRadius.vertical(top: Radius.circular(14)),
+                          onTap: () {
+                            entry?.remove();
+                            widget.onEdited?.call();
+                          },
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                            child: Row(
+                              children: [
+                                Icon(Icons.edit_outlined, size: 18,
+                                    color: Theme.of(ctx).colorScheme.primary),
+                                const SizedBox(width: 12),
+                                Text('编辑记录',
+                                    style: TextStyle(
+                                        fontSize: 14, color: Theme.of(ctx).colorScheme.primary)),
+                              ],
+                            ),
+                          ),
+                        ),
+                        Divider(height: 1,
+                            color: Theme.of(ctx).colorScheme.outlineVariant.withValues(alpha: 0.3)),
+                        // 删除
+                        InkWell(
+                          onTap: () {
+                            entry?.remove();
+                            _confirmDelete();
+                          },
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                            child: Row(
+                              children: [
+                                Icon(Icons.delete_outline, size: 18,
+                                    color: Theme.of(ctx).colorScheme.error),
+                                const SizedBox(width: 12),
+                                Text('删除记录',
+                                    style: TextStyle(
+                                        fontSize: 14, color: Theme.of(ctx).colorScheme.error)),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                // 箭头（在 Material 外部，不被圆角裁剪）
+                Transform.translate(
+                  offset: Offset(popupWidth / 2 - 6, 0),
+                  child: CustomPaint(
+                    size: const Size(12, 8),
+                    painter: _ArrowPainter(
+                      color: Theme.of(ctx).colorScheme.surface,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+
+    overlay.insert(entry);
+  }
+
+  Future<void> _confirmDelete() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('确认删除'),
+        content: const Text('确定要删除这条记录吗？'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('取消'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            style: TextButton.styleFrom(
+                foregroundColor: Theme.of(ctx).colorScheme.error),
+            child: const Text('删除'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true) {
+      widget.onDeleted?.call();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final r = widget.record;
+    final cs = widget.colorScheme;
+
+    return Card(
+      margin: const EdgeInsets.symmetric(vertical: 4),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: () => setState(() => _expanded = !_expanded),
+        onLongPress: _showPopupMenu,
+        child: AnimatedCrossFade(
+          duration: const Duration(milliseconds: 200),
+          crossFadeState:
+              _expanded ? CrossFadeState.showSecond : CrossFadeState.showFirst,
+          firstChild: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        r.content,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(fontSize: 14),
+                      ),
+                    ),
+                    if (r.mood != null) ...[
+                      const SizedBox(width: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: r.color != null
+                              ? Color(r.color!).withValues(alpha: 0.3)
+                              : cs.primary.withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Text(
+                          r.mood!,
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: r.color != null
+                                ? Color(r.color!).withValues(alpha: 0.9)
+                                : cs.primary,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  _formatDate(r.createdAt),
+                  style: TextStyle(
+                      fontSize: 11, color: cs.onSurfaceVariant.withValues(alpha: 0.5)),
+                ),
+              ],
+            ),
+          ),
+          secondChild: Padding(
+            padding: const EdgeInsets.all(12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  r.content,
+                  style: const TextStyle(fontSize: 14, height: 1.6),
+                ),
+                if (r.mood != null) ...[
+                  const SizedBox(height: 8),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: r.color != null
+                          ? Color(r.color!).withValues(alpha: 0.3)
+                          : cs.primary.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Text(
+                      '心情：${r.mood}',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: r.color != null
+                            ? Color(r.color!).withValues(alpha: 0.9)
+                            : cs.primary,
+                      ),
+                    ),
+                  ),
+                ],
+                const SizedBox(height: 6),
+                Text(
+                  _formatDate(r.createdAt),
+                  style: TextStyle(
+                      fontSize: 11, color: cs.onSurfaceVariant.withValues(alpha: 0.6)),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 /// 根据当前主题返回页面背景装饰（浅色暖渐变 / 深色暗调）
@@ -554,6 +1134,32 @@ BoxDecoration _pageBackground(BuildContext context) {
           : [const Color(0xFFFDF6EC), const Color(0xFFF5EAE0)],
     ),
   );
+}
+
+/// 气泡箭头绘制（下三角，居中显示）
+class _ArrowPainter extends CustomPainter {
+  final Color color;
+  static const double arrowWidth = 12;
+  static const double arrowHeight = 8;
+
+  const _ArrowPainter({required this.color});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()..color = color;
+    final centerX = size.width / 2;
+    final startX = centerX - arrowWidth / 2;
+    final endX = centerX + arrowWidth / 2;
+    final path = Path()
+      ..moveTo(startX, 0)
+      ..lineTo(centerX, arrowHeight)
+      ..lineTo(endX, 0)
+      ..close();
+    canvas.drawPath(path, paint);
+  }
+
+  @override
+  bool shouldRepaint(_ArrowPainter oldDelegate) => oldDelegate.color != color;
 }
 
 // ═══════════════════════════════════════
