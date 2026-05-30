@@ -5,6 +5,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:exif/exif.dart';
 import 'package:photo_manager/photo_manager.dart';
 import '../services/photo_service.dart';
+import '../services/view_history_service.dart';
+import '../models/view_history.dart';
 
 /// 随机照片页面状态
 class RandomPhotoState {
@@ -69,14 +71,23 @@ class PhotoProvider extends AsyncNotifier<RandomPhotoState> {
       );
     }
 
-    // 2. 随机选取一张照片
-    final photo = await _photoService.getRandomPhoto();
+    // 2. 加权随机选取一张照片（近30天看得越少权重越高）
+    final recentViews = await ViewHistoryService.getRecentViewCounts();
+    final photo = await _photoService.getWeightedRandomPhoto(recentViews);
     if (photo == null) {
       return const RandomPhotoState(
         hasPermission: true,
         errorMessage: '相册中没有找到照片',
       );
     }
+
+    // 记录浏览历史
+    try {
+      await ViewHistoryService.create(ViewHistory(
+        photoId: photo.id,
+        viewedAt: DateTime.now(),
+      ));
+    } catch (_) {}
 
     return RandomPhotoState(
       photo: photo,

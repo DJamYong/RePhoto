@@ -15,7 +15,7 @@ class _PolaroidCard extends ConsumerWidget {
     final colorScheme = Theme.of(context).colorScheme;
 
     // 没有任何信息要显示时，省略底部区域
-    final showBottom = prefs.showDate || prefs.showTitle;
+    final showBottom = prefs.showDate || prefs.showAge;
 
     return Container(
       decoration: BoxDecoration(
@@ -69,19 +69,17 @@ class _PolaroidCard extends ConsumerWidget {
                       ),
                       textAlign: TextAlign.center,
                     ),
-                  if (prefs.showTitle && (photo.title?.isNotEmpty ?? false))
+                  if (prefs.showAge)
                     Padding(
                       padding: const EdgeInsets.only(top: 4),
                       child: Text(
-                        photo.title!,
+                        _formatPhotoAge(photo.createDateTime),
                         style: TextStyle(
                           fontSize: 11,
                           color: colorScheme.onSurfaceVariant.withValues(alpha: 0.5),
                           letterSpacing: 1,
                         ),
                         textAlign: TextAlign.center,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
                       ),
                     ),
                 ],
@@ -94,6 +92,44 @@ class _PolaroidCard extends ConsumerWidget {
 
   String _formatDate(DateTime date) {
     return '${date.year} 年 ${date.month} 月 ${date.day} 日';
+  }
+
+  /// 格式化照片年龄
+  ///
+  /// - < 1 个月：显示 "X 天前"
+  /// - 整月：显示 "X 个月前"
+  /// - 多月 + 余天：显示 "X 个月 Y 天前"
+  /// - >= 1 年：显示 "X 年 Y 个月 Z 天前"（无余数时不显示天）
+  String _formatPhotoAge(DateTime taken) {
+    final now = DateTime.now();
+    final totalDays = now.difference(taken).inDays;
+
+    if (totalDays == 0) return '拍摄于今天';
+    if (totalDays < 30) return '拍摄于 $totalDays 天前';
+
+    // 精确计算年月日差
+    var years = now.year - taken.year;
+    var months = now.month - taken.month;
+    var days = now.day - taken.day;
+
+    if (days < 0) {
+      months--;
+      // 取上个月的最后一天
+      final prevMonthEnd = DateTime(now.year, now.month, 0);
+      days += prevMonthEnd.day;
+    }
+    if (months < 0) {
+      years--;
+      months += 12;
+    }
+
+    final parts = <String>[];
+    if (years > 0) parts.add('$years 年');
+    if (months > 0) parts.add('$months 个月');
+    // if (days > 0) parts.add('$days 天');
+
+    if (parts.isEmpty) return '拍摄于 $totalDays 天前';
+    return '拍摄于 ${parts.join(' ')}前';
   }
 }
 

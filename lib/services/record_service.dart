@@ -1,3 +1,4 @@
+import 'package:sqflite/sqflite.dart';
 import '../models/record.dart';
 import 'database_service.dart';
 
@@ -50,6 +51,13 @@ class RecordService {
       where: 'id = ?',
       whereArgs: [id],
     );
+  }
+
+  /// 获取写过记录的照片数
+  static Future<int> countDistinctPhotos() async {
+    final result = await DatabaseService.db.rawQuery(
+        'SELECT COUNT(DISTINCT photo_id) AS c FROM $_table');
+    return Sqflite.firstIntValue(result) ?? 0;
   }
 
   /// 获取所有记录（按更新时间倒序）

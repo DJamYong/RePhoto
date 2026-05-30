@@ -5,21 +5,21 @@ import 'theme_provider.dart';
 class PhotoDisplayPrefs {
   /// 是否显示拍摄日期
   final bool showDate;
-  /// 是否显示文件名
-  final bool showTitle;
+  /// 是否显示照片年龄（拍摄于 X 年前）
+  final bool showAge;
 
   const PhotoDisplayPrefs({
     this.showDate = true,
-    this.showTitle = false,
+    this.showAge = false,
   });
 
   PhotoDisplayPrefs copyWith({
     bool? showDate,
-    bool? showTitle,
+    bool? showAge,
   }) {
     return PhotoDisplayPrefs(
       showDate: showDate ?? this.showDate,
-      showTitle: showTitle ?? this.showTitle,
+      showAge: showAge ?? this.showAge,
     );
   }
 }
@@ -27,14 +27,14 @@ class PhotoDisplayPrefs {
 /// 照片信息显示偏好 Notifier
 class PhotoDisplayPrefsNotifier extends Notifier<PhotoDisplayPrefs> {
   static const _keyShowDate = 'photo_showDate';
-  static const _keyShowTitle = 'photo_showTitle';
+  static const _keyShowAge = 'photo_showAge';
 
   @override
   PhotoDisplayPrefs build() {
     final prefs = ref.watch(sharedPrefsProvider);
     return PhotoDisplayPrefs(
       showDate: prefs.getBool(_keyShowDate) ?? true,
-      showTitle: prefs.getBool(_keyShowTitle) ?? false,
+      showAge: prefs.getBool(_keyShowAge) ?? false,
     );
   }
 
@@ -43,9 +43,9 @@ class PhotoDisplayPrefsNotifier extends Notifier<PhotoDisplayPrefs> {
     ref.read(sharedPrefsProvider).setBool(_keyShowDate, value);
   }
 
-  void setShowTitle(bool value) {
-    state = state.copyWith(showTitle: value);
-    ref.read(sharedPrefsProvider).setBool(_keyShowTitle, value);
+  void setShowAge(bool value) {
+    state = state.copyWith(showAge: value);
+    ref.read(sharedPrefsProvider).setBool(_keyShowAge, value);
   }
 }
 
