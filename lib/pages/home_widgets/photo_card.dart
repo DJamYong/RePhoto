@@ -14,6 +14,11 @@ class _PolaroidCard extends ConsumerWidget {
     final prefs = ref.watch(photoDisplayPrefsProvider);
     final colorScheme = Theme.of(context).colorScheme;
 
+    // 判断是否往年的同月同日（"此刻·彼时"）
+    final now = DateTime.now();
+    final taken = photo.createDateTime;
+    final isHistoricalMoment = taken.month == now.month && taken.day == now.day && taken.year != now.year;
+
     // 没有任何信息要显示时，省略底部区域
     final showBottom = prefs.showDate || prefs.showAge;
 
@@ -45,9 +50,48 @@ class _PolaroidCard extends ConsumerWidget {
             padding: const EdgeInsets.all(12),
             child: ClipRRect(
               borderRadius: BorderRadius.circular(2),
-              child: AspectRatio(
-                aspectRatio: 1,
-                child: _PhotoWidget(photo: photo),
+              child: Stack(
+                children: [
+                  AspectRatio(
+                    aspectRatio: 1,
+                    child: _PhotoWidget(photo: photo),
+                  ),
+                  if (isHistoricalMoment)
+                    Positioned(
+                      top: 8,
+                      left: 8,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: colorScheme.primary.withValues(alpha: 0.85),
+                          borderRadius: BorderRadius.circular(12),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withValues(alpha: 0.15),
+                              blurRadius: 4,
+                              offset: const Offset(0, 2),
+                            ),
+                          ],
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.auto_awesome, size: 12, color: colorScheme.onPrimary),
+                            const SizedBox(width: 4),
+                            Text(
+                              '此刻·彼时',
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w600,
+                                color: colorScheme.onPrimary,
+                                letterSpacing: 1,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                ],
               ),
             ),
           ),

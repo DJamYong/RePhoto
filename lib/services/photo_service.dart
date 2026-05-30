@@ -98,12 +98,26 @@ class PhotoService {
         : recentViewCounts.values.reduce(max);
     final weightBase = maxCount + 1;
 
+    // 从往年的同月同日照片中随机挑一张，权重提升5倍
+    final now = DateTime.now();
+    String? boostedPhotoId;
+    final sameDayPhotos = allPhotos.where((p) {
+      final t = p.createDateTime;
+      return t.month == now.month && t.day == now.day && t.year != now.year;
+    }).toList();
+    if (sameDayPhotos.isNotEmpty) {
+      boostedPhotoId = sameDayPhotos[Random().nextInt(sameDayPhotos.length)].id;
+    }
+
     // 计算权重并构建加权池
     final weights = <int>[];
     var totalWeight = 0;
     for (final photo in allPhotos) {
       final recentCount = recentViewCounts[photo.id] ?? 0;
-      final weight = max(1, weightBase - recentCount);
+      var weight = max(1, weightBase - recentCount);
+      if (photo.id == boostedPhotoId) {
+        weight *= 5;
+      }
       weights.add(weight);
       totalWeight += weight;
     }
