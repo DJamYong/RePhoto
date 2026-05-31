@@ -4,11 +4,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:exif/exif.dart';
 import 'package:photo_manager/photo_manager.dart';
+import 'package:google_fonts/google_fonts.dart';
 import '../providers/photo_provider.dart';
 import '../providers/preferences_provider.dart';
 import '../models/record.dart';
 import '../services/record_service.dart';
 import '../widgets/record_tile_widget.dart';
+import '../widgets/mood_selector.dart';
 import 'photo_fullscreen_page.dart';
 import 'settings_page.dart';
 
@@ -47,9 +49,8 @@ class HomePage extends ConsumerWidget {
           ),
           title: Text(
             'RePhoto',
-            style: TextStyle(
-              fontWeight: FontWeight.w300,
-              letterSpacing: 4,
+            style: GoogleFonts.dancingScript(
+              fontWeight: FontWeight.w500,
               color: Theme.of(context).colorScheme.primary,
             ),
           ),

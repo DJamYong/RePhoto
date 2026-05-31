@@ -1,5 +1,7 @@
 part of '../home_page.dart';
 
+// 心情 Emoji 映射表复用 widget/mood_selector.dart 中定义的 moodEmojiMap
+
 class _PhotoAlbumView extends StatefulWidget {
   final AssetEntity photo;
   final WidgetRef ref;
@@ -26,7 +28,7 @@ class _PhotoAlbumViewState extends State<_PhotoAlbumView> {
           children: [
             const SizedBox(height: 16),
             Text('✧ 今日回忆 ✧',
-              style: TextStyle(fontSize: 14, color: cs.primary.withValues(alpha: 0.7), letterSpacing: 6),
+              style: TextStyle(fontSize: 16, color: cs.primary.withValues(alpha: 0.7), letterSpacing: 6),
             ),
             const SizedBox(height: 8),
             Expanded(
@@ -136,9 +138,10 @@ class _PhotoAlbumViewState extends State<_PhotoAlbumView> {
   Future<void> _showRecordDialog(BuildContext context, AssetEntity photo, ColorScheme cs, {Record? editRecord}) async {
     final isEditing = editRecord != null;
     final contentCtrl = TextEditingController(text: editRecord?.content ?? '');
-    final moodCtrl = TextEditingController(text: editRecord?.mood ?? '');
     final formKey = GlobalKey<FormState>();
     int? selectedColor = editRecord?.color;
+    String? selectedMood = editRecord?.mood;
+
 
     await showDialog(
       context: context,
@@ -162,9 +165,16 @@ class _PhotoAlbumViewState extends State<_PhotoAlbumView> {
                       maxLines: 4, minLines: 3,
                       validator: (v) => (v == null || v.trim().isEmpty) ? '请输入记录内容' : null),
                     const SizedBox(height: 16),
-                    TextFormField(controller: moodCtrl,
-                      decoration: const InputDecoration(labelText: '心情（可选）', hintText: '例如：开心、😊、怀念…', border: OutlineInputBorder(), prefixIcon: Icon(Icons.mood_outlined), counterText: ''),
-                      maxLines: 1, maxLength: 12),
+                    MoodSelector(
+                      selectedMood: selectedMood,
+                      colorScheme: cs,
+                      onTap: (RenderBox box) {
+                        _showMoodOverlay(context, cs, box, selectedMood, (String? val) {
+                          setDialogState(() => selectedMood = val);
+                        });
+                      },
+                      onClear: () => setDialogState(() => selectedMood = null),
+                    ),
                     const SizedBox(height: 16),
                     Align(alignment: Alignment.centerLeft,
                       child: Text('标签颜色', style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant.withValues(alpha: 0.7)))),
@@ -198,16 +208,17 @@ class _PhotoAlbumViewState extends State<_PhotoAlbumView> {
               onPressed: () async {
                 if (!formKey.currentState!.validate()) return;
                 final now = DateTime.now();
+                final moodValue = composeMood(selectedMood);
                 final Record record;
                 if (isEditing) {
                   record = Record(id: editRecord.id, photoId: editRecord.photoId,
                     content: contentCtrl.text.trim(),
-                    mood: moodCtrl.text.trim().isEmpty ? null : moodCtrl.text.trim(),
+                    mood: moodValue,
                     color: selectedColor, createdAt: editRecord.createdAt, updatedAt: DateTime.now());
                 } else {
                   record = Record(photoId: photo.id,
                     content: contentCtrl.text.trim(),
-                    mood: moodCtrl.text.trim().isEmpty ? null : moodCtrl.text.trim(),
+                    mood: moodValue,
                     color: selectedColor, createdAt: now, updatedAt: now);
                 }
                 try {
@@ -241,6 +252,71 @@ class _PhotoAlbumViewState extends State<_PhotoAlbumView> {
         ),
       ),
     );
+  }
+
+  /// 在心情选择器下方弹出覆盖面板
+  void _showMoodOverlay(BuildContext context, ColorScheme cs, RenderBox anchor,
+      String? current, void Function(String?) onSelected) {
+    final overlay = Overlay.of(context);
+    OverlayEntry? entry;
+    final double left = 40;
+    final double top = anchor.localToGlobal(Offset(0, anchor.size.height)).dy + 4;
+
+    entry = OverlayEntry(
+      builder: (ctx) => Stack(
+        children: [
+          Positioned.fill(
+            child: GestureDetector(
+              onTap: () => entry?.remove(),
+              child: Container(color: Colors.transparent),
+            ),
+          ),
+          Positioned(
+            left: left,
+            top: top.clamp(0, MediaQuery.of(ctx).size.height - 240),
+            child: Material(
+              elevation: 8,
+              borderRadius: BorderRadius.circular(14),
+              shadowColor: Colors.black26,
+              child: Container(
+                width: MediaQuery.of(ctx).size.width - left * 2,
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Theme.of(ctx).colorScheme.surface,
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: Wrap(
+                  alignment: WrapAlignment.center,
+                  spacing: 10, runSpacing: 10,
+                  children: moodEmojiMap.entries.map((e) {
+                    final isSel = current == e.value;
+                    return GestureDetector(
+                      onTap: () {
+                        entry?.remove();
+                        onSelected(isSel ? null : e.value);
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                        decoration: BoxDecoration(
+                          color: isSel ? cs.primary.withValues(alpha: 0.15) : Colors.transparent,
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(
+                            color: isSel ? cs.primary : cs.outlineVariant.withValues(alpha: 0.3),
+                            width: isSel ? 1.5 : 1,
+                          ),
+                        ),
+                        child: Text('${e.key} ${e.value}', style: TextStyle(fontSize: 15)),
+                      ),
+                    );
+                  }).toList(),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+    overlay.insert(entry);
   }
 
   /// 弹出全部记录列表
@@ -287,3 +363,5 @@ class _PhotoAlbumViewState extends State<_PhotoAlbumView> {
     );
   }
 }
+
+

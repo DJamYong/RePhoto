@@ -8,6 +8,7 @@ import '../services/view_history_service.dart';
 import '../services/record_service.dart';
 import '../models/record.dart';
 import '../widgets/record_tile_widget.dart';
+import '../widgets/mood_selector.dart';
 
 /// 设置页面 — 照片信息 / 主题 / 关于
 class SettingsPage extends ConsumerStatefulWidget {
@@ -349,9 +350,9 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
   /// 编辑记录对话框
   Future<Record?> _editRecordDialog(BuildContext context, ColorScheme cs, Record record) async {
     final contentCtrl = TextEditingController(text: record.content);
-    final moodCtrl = TextEditingController(text: record.mood ?? '');
     final formKey = GlobalKey<FormState>();
     int? selectedColor = record.color;
+    String? selectedMood = _parseMoodLabel(record.mood);
 
     final result = await showDialog<bool>(
       context: context,
@@ -372,9 +373,16 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                   maxLines: 3, minLines: 2,
                   validator: (v) => (v == null || v.trim().isEmpty) ? '请输入记录内容' : null),
                 const SizedBox(height: 12),
-                TextFormField(controller: moodCtrl,
-                  decoration: const InputDecoration(labelText: '心情（可选）', border: OutlineInputBorder(), counterText: ''),
-                  maxLines: 1, maxLength: 12),
+                MoodSelector(
+                  selectedMood: selectedMood,
+                  colorScheme: cs,
+                  onTap: (RenderBox box) {
+                    _showMoodOverlay(context, cs, box, selectedMood, (String? val) {
+                      setDialogState(() => selectedMood = val);
+                    });
+                  },
+                  onClear: () => setDialogState(() => selectedMood = null),
+                ),
                 const SizedBox(height: 16),
                 Align(alignment: Alignment.centerLeft,
                   child: Text('标签颜色', style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant.withValues(alpha: 0.7)))),
@@ -414,15 +422,96 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     );
 
     if (result == true) {
-      final updated = record.copyWith(
+      final moodValue = composeMood(selectedMood);
+      final updated = Record(
+        id: record.id,
+        photoId: record.photoId,
         content: contentCtrl.text.trim(),
-        mood: moodCtrl.text.trim().isEmpty ? null : moodCtrl.text.trim(),
+        mood: moodValue,
         color: selectedColor,
+        createdAt: record.createdAt,
+        updatedAt: DateTime.now(),
       );
       await RecordService.update(updated);
       return updated;
     }
     return null;
+  }
+
+  /// 从存储的 mood 值（如 "😊 开心"）中提取标签文字（"开心"）
+  String? _parseMoodLabel(String? mood) {
+    if (mood == null) return null;
+    // 已有 emoji + 文字格式 "😊 开心" → 提取 "开心"
+    if (mood.contains(' ')) {
+      final parts = mood.split(' ');
+      if (parts.length >= 2) return parts.sublist(1).join(' ');
+    }
+    return mood;
+  }
+
+  /// 在心情选择器下方弹出覆盖面板
+  void _showMoodOverlay(BuildContext context, ColorScheme cs, RenderBox anchor,
+      String? current, void Function(String?) onSelected) {
+    final overlay = Overlay.of(context);
+    OverlayEntry? entry;
+    final double left = 40;
+    final double top = anchor.localToGlobal(Offset(0, anchor.size.height)).dy + 4;
+
+    entry = OverlayEntry(
+      builder: (ctx) => Stack(
+        children: [
+          Positioned.fill(
+            child: GestureDetector(
+              onTap: () => entry?.remove(),
+              child: Container(color: Colors.transparent),
+            ),
+          ),
+          Positioned(
+            left: left,
+            top: top.clamp(0, MediaQuery.of(ctx).size.height - 240),
+            child: Material(
+              elevation: 8,
+              borderRadius: BorderRadius.circular(14),
+              shadowColor: Colors.black26,
+              child: Container(
+                width: MediaQuery.of(ctx).size.width - left * 2,
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Theme.of(ctx).colorScheme.surface,
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: Wrap(
+                  alignment: WrapAlignment.center,
+                  spacing: 10, runSpacing: 10,
+                  children: moodEmojiMap.entries.map((e) {
+                    final isSel = current == e.value;
+                    return GestureDetector(
+                      onTap: () {
+                        entry?.remove();
+                        onSelected(isSel ? null : e.value);
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                        decoration: BoxDecoration(
+                          color: isSel ? cs.primary.withValues(alpha: 0.15) : Colors.transparent,
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(
+                            color: isSel ? cs.primary : cs.outlineVariant.withValues(alpha: 0.3),
+                            width: isSel ? 1.5 : 1,
+                          ),
+                        ),
+                        child: Text('${e.key} ${e.value}', style: TextStyle(fontSize: 15)),
+                      ),
+                    );
+                  }).toList(),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+    overlay.insert(entry);
   }
 }
 

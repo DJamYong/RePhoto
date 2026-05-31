@@ -106,7 +106,7 @@ class _PolaroidCard extends ConsumerWidget {
                     Text(
                       _formatDate(photo.createDateTime),
                       style: TextStyle(
-                        fontSize: 12,
+                        fontSize: 16,
                         color: colorScheme.onSurfaceVariant.withValues(alpha: 0.7),
                         letterSpacing: 2,
                         fontStyle: FontStyle.italic,
@@ -119,7 +119,7 @@ class _PolaroidCard extends ConsumerWidget {
                       child: Text(
                         _formatPhotoAge(photo.createDateTime),
                         style: TextStyle(
-                          fontSize: 11,
+                          fontSize: 15,
                           color: colorScheme.onSurfaceVariant.withValues(alpha: 0.5),
                           letterSpacing: 1,
                         ),
@@ -148,8 +148,8 @@ class _PolaroidCard extends ConsumerWidget {
     final now = DateTime.now();
     final totalDays = now.difference(taken).inDays;
 
-    if (totalDays == 0) return '拍摄于今天';
-    if (totalDays < 30) return '拍摄于 $totalDays 天前';
+    if (totalDays == 0) return '记录于今天';
+    if (totalDays < 30) return '记录于 $totalDays 天前';
 
     // 精确计算年月日差
     var years = now.year - taken.year;
@@ -172,8 +172,8 @@ class _PolaroidCard extends ConsumerWidget {
     if (months > 0) parts.add('$months 个月');
     // if (days > 0) parts.add('$days 天');
 
-    if (parts.isEmpty) return '拍摄于 $totalDays 天前';
-    return '拍摄于 ${parts.join(' ')}前';
+    if (parts.isEmpty) return '记录于 $totalDays 天前';
+    return '记录于 ${parts.join(' ')}前';
   }
 }
 
