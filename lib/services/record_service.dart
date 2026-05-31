@@ -60,6 +60,17 @@ class RecordService {
     return Sqflite.firstIntValue(result) ?? 0;
   }
 
+  /// 获取有记录的照片及记录数 Map<photoId, count>
+  static Future<Map<String, int>> getPhotoRecordCounts() async {
+    final rows = await DatabaseService.db.rawQuery('''
+      SELECT photo_id, COUNT(*) AS cnt
+      FROM $_table
+      GROUP BY photo_id
+      ORDER BY cnt DESC
+    ''');
+    return {for (final r in rows) r['photo_id'] as String: r['cnt'] as int};
+  }
+
   /// 获取所有记录（按更新时间倒序）
   static Future<List<Record>> getAll({int? limit}) async {
     final rows = await DatabaseService.db.query(

@@ -8,13 +8,13 @@ import '../providers/photo_provider.dart';
 import '../providers/preferences_provider.dart';
 import '../models/record.dart';
 import '../services/record_service.dart';
+import '../widgets/record_tile_widget.dart';
 import 'photo_fullscreen_page.dart';
 import 'settings_page.dart';
 
 part 'home_widgets/warm_loading.dart';
 part 'home_widgets/photo_card.dart';
 part 'home_widgets/detail_panel.dart';
-part 'home_widgets/record_tile.dart';
 part 'home_widgets/photo_album_view.dart';
 
 /// 首页 — 暖色回忆风 · 拍立得照片展示

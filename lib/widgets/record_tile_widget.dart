@@ -1,13 +1,17 @@
-part of '../home_page.dart';
+import 'dart:math';
+import 'package:flutter/material.dart';
+import '../models/record.dart';
+import '../services/record_service.dart';
 
-/// 记录列表中的单条记录瓦片（可展开，长按弹出操作菜单）
-class _RecordTile extends StatefulWidget {
+/// 记录条目组件（可展开/折叠，长按编辑/删除）
+class RecordTileWidget extends StatefulWidget {
   final Record record;
   final ColorScheme colorScheme;
   final VoidCallback? onDeleted;
   final VoidCallback? onEdited;
 
-  const _RecordTile({
+  const RecordTileWidget({
+    super.key,
     required this.record,
     required this.colorScheme,
     this.onDeleted,
@@ -15,10 +19,10 @@ class _RecordTile extends StatefulWidget {
   });
 
   @override
-  State<_RecordTile> createState() => _RecordTileState();
+  State<RecordTileWidget> createState() => _RecordTileWidgetState();
 }
 
-class _RecordTileState extends State<_RecordTile> {
+class _RecordTileWidgetState extends State<RecordTileWidget> {
   bool _expanded = false;
 
   String _formatDate(DateTime dt) {
@@ -118,7 +122,7 @@ class _RecordTileState extends State<_RecordTile> {
                   offset: Offset(popupWidth / 2 - 6, 0),
                   child: CustomPaint(
                     size: const Size(12, 8),
-                    painter: _ArrowPainter(
+                    painter: _ArrowBubblePainter(
                       color: Theme.of(ctx).colorScheme.surface,
                     ),
                   ),
@@ -265,13 +269,13 @@ class _RecordTileState extends State<_RecordTile> {
   }
 }
 
-/// 气泡箭头绘制（下三角，居中显示）
-class _ArrowPainter extends CustomPainter {
+/// 气泡箭头绘制
+class _ArrowBubblePainter extends CustomPainter {
   final Color color;
   static const double arrowWidth = 12;
   static const double arrowHeight = 8;
 
-  const _ArrowPainter({required this.color});
+  const _ArrowBubblePainter({required this.color});
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -288,5 +292,5 @@ class _ArrowPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(_ArrowPainter oldDelegate) => oldDelegate.color != color;
+  bool shouldRepaint(_ArrowBubblePainter oldDelegate) => oldDelegate.color != color;
 }

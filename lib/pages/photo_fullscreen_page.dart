@@ -25,8 +25,6 @@ class _PhotoFullscreenPageState extends State<PhotoFullscreenPage>
   // 手势起始快照
   double _baseScale = 1.0;
   double _baseRotation = 0.0;
-  Offset _baseTranslation = Offset.zero;
-
   // ── 动画 ──
   late final AnimationController _animCtrl;
   Animation<double>? _animScale;
@@ -88,7 +86,6 @@ class _PhotoFullscreenPageState extends State<PhotoFullscreenPage>
   void _onScaleStart(ScaleStartDetails d) {
     _baseScale = _scale;
     _baseRotation = _rotation;
-    _baseTranslation = _translation;
     // 清除动画引用，防止 onAnimTick 读到过期值
     _animScale = null;
     _animRot = null;
@@ -101,7 +98,7 @@ class _PhotoFullscreenPageState extends State<PhotoFullscreenPage>
     setState(() {
       _scale = (_baseScale * d.scale).clamp(0.3, 6.0);
       _rotation = _baseRotation + d.rotation;
-      _translation = _baseTranslation + d.focalPointDelta;
+      _translation += d.focalPointDelta;
     });
   }
 
@@ -156,29 +153,47 @@ class _PhotoFullscreenPageState extends State<PhotoFullscreenPage>
       body: Stack(
         fit: StackFit.expand,
         children: [
-          Center(
-            child: _isLoading
-                ? const CircularProgressIndicator(
-                    color: Colors.white54, strokeWidth: 2)
-                : _imageBytes != null
-                    ? GestureDetector(
-                        onScaleStart: _onScaleStart,
-                        onScaleUpdate: _onScaleUpdate,
-                        onScaleEnd: _onScaleEnd,
-                        onDoubleTap: _onDoubleTap,
-                        onTap: _onTap,
-                        child: Transform(
-                          transform: transform,
-                          alignment: Alignment.center,
-                          child: Image.memory(
-                            _imageBytes!,
-                            fit: BoxFit.contain,
-                          ),
-                        ),
-                      )
-                    : const Icon(Icons.broken_image_outlined,
-                        color: Colors.white54, size: 48),
-          ),
+          // 照片（全屏显示）
+          if (_imageBytes != null)
+            Center(
+              child: Transform(
+                transform: transform,
+                alignment: Alignment.center,
+                child: Image.memory(
+                  _imageBytes!,
+                  fit: BoxFit.contain,
+                ),
+              ),
+            ),
+
+          // 手势控制层（铺满全屏，留出系统手势边距，透明响应）
+          if (_imageBytes != null)
+            Positioned.fill(
+              child: Padding(
+                padding: const EdgeInsets.only(
+                  left: 12, right: 12, top: 40, bottom: 20,
+                ),
+                child: GestureDetector(
+                  onScaleStart: _onScaleStart,
+                  onScaleUpdate: _onScaleUpdate,
+                  onScaleEnd: _onScaleEnd,
+                  onDoubleTap: _onDoubleTap,
+                  onTap: _onTap,
+                  behavior: HitTestBehavior.opaque,
+                  child: const SizedBox.expand(),
+                ),
+              ),
+            ),
+
+          // 加载/错误状态
+          if (_imageBytes == null)
+            Center(
+              child: _isLoading
+                  ? const CircularProgressIndicator(
+                      color: Colors.white54, strokeWidth: 2)
+                  : const Icon(Icons.broken_image_outlined,
+                      color: Colors.white54, size: 48),
+            ),
 
           if (_showUI)
             Positioned(
@@ -208,7 +223,7 @@ class _PhotoFullscreenPageState extends State<PhotoFullscreenPage>
               left: 0, right: 0,
               child: const Center(
                 child: Text(
-                  '双指缩放/旋转',
+                  '拖动移动 · 双指缩放/旋转',
                   style: TextStyle(
                       color: Colors.white38, fontSize: 12, letterSpacing: 1),
                 ),

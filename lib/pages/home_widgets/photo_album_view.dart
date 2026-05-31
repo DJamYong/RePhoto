@@ -262,7 +262,7 @@ class _PhotoAlbumViewState extends State<_PhotoAlbumView> {
                 itemCount: records.length,
                 itemBuilder: (context, index) {
                   final record = records[index];
-                  return _RecordTile(
+                  return RecordTileWidget(
                     record: record, colorScheme: cs,
                     onEdited: () async {
                       await _showRecordDialog(context, photo, cs, editRecord: record);
