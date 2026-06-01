@@ -167,31 +167,147 @@ class _CoverPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [cs.primary.withValues(alpha: 0.15), cs.surface],
+    final mn = month >= 1 && month <= 12
+        ? ['', '一月', '二月', '三月', '四月', '五月', '六月', '七月', '八月', '九月', '十月', '十一月', '十二月'][month]
+        : '$month月';
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final bgColor = isDark ? cs.surface : const Color(0xFFFDF6EC);
+    return Stack(
+      children: [
+        // 背景装饰圆
+        Positioned(top: -60, right: -40,
+          child: Container(width: 200, height: 200,
+            decoration: BoxDecoration(shape: BoxShape.circle,
+                color: cs.primary.withValues(alpha: 0.06)),
+          ),
         ),
-      ),
-      child: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.only(bottom: 56),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Text('$year 年 $month 月',
-                style: TextStyle(fontSize: 28, fontWeight: FontWeight.w300, color: cs.primary, letterSpacing: 4)),
-            const SizedBox(height: 16),
-            Text('你的回忆', style: TextStyle(fontSize: 16, color: cs.onSurfaceVariant.withValues(alpha: 0.7))),
-            const Spacer(),
-            Icon(Icons.keyboard_arrow_down_rounded, size: 28, color: cs.onSurfaceVariant.withValues(alpha: 0.3)),
-            const SizedBox(height: 24),
-          ],
+        Positioned(bottom: 80, left: -50,
+          child: Container(width: 150, height: 150,
+            decoration: BoxDecoration(shape: BoxShape.circle,
+                color: cs.primary.withValues(alpha: 0.04)),
+          ),
         ),
-      ),
-      ),
+        Positioned(top: 200, left: 30,
+          child: Container(width: 60, height: 60,
+            decoration: BoxDecoration(shape: BoxShape.circle,
+                color: cs.primary.withValues(alpha: 0.05)),
+          ),
+        ),
+        Container(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [bgColor, bgColor],
+            ),
+          ),
+          child: SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.only(bottom: 56),
+              child: Column(
+                children: [
+                  const Spacer(),
+                  // 纸质日历卡片
+                  Center(
+                    child: Container(
+                      width: 220,
+                      padding: const EdgeInsets.only(top: 20, bottom: 24),
+                      decoration: BoxDecoration(
+                        color: cs.surface,
+                        borderRadius: BorderRadius.circular(6),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.08),
+                            blurRadius: 20,
+                            offset: const Offset(0, 8),
+                          ),
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.04),
+                            blurRadius: 6,
+                            offset: const Offset(0, 2),
+                          ),
+                        ],
+                      ),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          // 日历头部文字
+                          Padding(
+                            padding: const EdgeInsets.only(bottom: 12),
+                            child: Text('你的月份回顾', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w500,
+                                color: cs.primary.withValues(alpha: 0.6), letterSpacing: 3)),
+                          ),
+                          // 装订环
+                          Padding(
+                            padding: const EdgeInsets.only(bottom: 16),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: List.generate(5, (i) => Container(
+                                width: 8, height: 14,
+                                margin: EdgeInsets.symmetric(horizontal: 12),
+                                decoration: BoxDecoration(
+                                  color: cs.onSurfaceVariant.withValues(alpha: 0.08),
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                              )),
+                            ),
+                          ),
+                          // 月份
+                          Text(mn, style: TextStyle(fontSize: 36, fontWeight: FontWeight.w300,
+                              color: cs.onSurface, letterSpacing: 10)),
+                          const SizedBox(height: 8),
+                          // 年份
+                          Text('$year', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w300,
+                              color: cs.onSurfaceVariant.withValues(alpha: 0.5), letterSpacing: 6)),
+                          const SizedBox(height: 16),
+                          // 月份进度条（12 个月份，每行 6 个，已过月份点亮）
+                          Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 20),
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [0, 6].map((start) => Padding(
+                                padding: start > 0 ? const EdgeInsets.only(top: 6) : EdgeInsets.zero,
+                                child: Row(
+                                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                                  children: List.generate(6, (j) {
+                                    final i = start + j;
+                                    return Container(
+                                      width: 16, height: 16,
+                                      decoration: BoxDecoration(
+                                        color: i < month
+                                            ? cs.primary.withValues(alpha: 0.25)
+                                            : cs.surfaceContainerHighest.withValues(alpha: 0.2),
+                                        borderRadius: BorderRadius.circular(3),
+                                      ),
+                                    );
+                                  }),
+                                ),
+                              )).toList(),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                  const Spacer(),
+                  // 底部提示
+                  Column(
+                    children: [
+                      Icon(Icons.keyboard_arrow_down_rounded, size: 24,
+                          color: cs.onSurfaceVariant.withValues(alpha: 0.2)),
+                      const SizedBox(height: 4),
+                      Text('滑动浏览', style: TextStyle(fontSize: 11,
+                          color: cs.onSurfaceVariant.withValues(alpha: 0.2), letterSpacing: 2)),
+                    ],
+                  ),
+                  const SizedBox(height: 24),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ],
     );
   }
 }
