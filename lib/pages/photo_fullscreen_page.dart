@@ -103,13 +103,13 @@ class _PhotoFullscreenPageState extends State<PhotoFullscreenPage>
   }
 
   void _onScaleEnd(ScaleEndDetails d) {
-    if (_scale < 0.6) _animateReset();
+    if (_scale < 0.25) _animateReset();
   }
 
   // ── 双击 ──
 
   void _onDoubleTap() {
-    if (_scale > 1.2) {
+    if (_scale < 0.95 || _scale > 1.2) {
       _animateReset();
     } else {
       _animateTo(scale: 2.8, rotation: 0, translation: Offset.zero);
@@ -202,7 +202,7 @@ class _PhotoFullscreenPageState extends State<PhotoFullscreenPage>
               child: Row(
                 children: [
                   IconButton(
-                    icon: const Icon(Icons.close, color: Colors.white),
+                    icon: const Icon(Icons.close, color: Colors.white70),
                     onPressed: () => Navigator.of(context).pop(),
                   ),
                   const Spacer(),

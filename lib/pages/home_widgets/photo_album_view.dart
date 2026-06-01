@@ -38,9 +38,10 @@ class _PhotoAlbumViewState extends State<_PhotoAlbumView> {
                   child: GestureDetector(
                     onTap: () => Navigator.of(context).push(
                       PageRouteBuilder(
-                        pageBuilder: (context, anim1, anim2) => PhotoFullscreenPage(photo: photo),
-                        transitionsBuilder: (context, anim, secondaryAnim, child) => FadeTransition(opacity: anim, child: child),
-                        transitionDuration: const Duration(milliseconds: 250),
+                        pageBuilder: (_, __, ___) => PhotoFullscreenPage(photo: photo),
+                        transitionsBuilder: (_, __, ___, child) => child,
+                        transitionDuration: Duration.zero,
+                        reverseTransitionDuration: Duration.zero,
                       ),
                     ),
                     child: _PolaroidCard(photo: photo),

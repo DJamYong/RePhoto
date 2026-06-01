@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:photo_manager/photo_manager.dart';
 import '../services/review_service.dart';
 import '../models/record.dart';
+import '../widgets/review_widgets.dart';
+import 'photo_fullscreen_page.dart';
 
 /// 月度回顾页面 — 全屏沉浸式 PageView
 class MonthlyReviewPage extends StatefulWidget {
@@ -92,7 +94,7 @@ class _MonthlyReviewPageState extends State<MonthlyReviewPage> {
                 _CalendarPage(recordDays: _recordDays!, cs: cs),
                 _MoodPage(data: _moods!, cs: cs),
                 _PhotoGridPage(data: _topPhotos!, cs: cs),
-                _TextPage(records: _records!, cs: cs),
+                _TextPage(records: _records!, moods: _moods!, cs: cs),
               ],
             ),
           // 底部 1/3 区域手势翻页（优先于页面内滚动）
@@ -131,7 +133,7 @@ class _MonthlyReviewPageState extends State<MonthlyReviewPage> {
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   if (_currentPage > 0)
-                    _NavButton(
+                    NavButton(
                       icon: Icons.keyboard_arrow_up_rounded,
                       onTap: () => _pageCtrl.previousPage(
                         duration: const Duration(milliseconds: 300),
@@ -140,7 +142,7 @@ class _MonthlyReviewPageState extends State<MonthlyReviewPage> {
                     ),
                   const SizedBox(width: 8),
                   if (_currentPage < 6)
-                    _NavButton(
+                    NavButton(
                       icon: Icons.keyboard_arrow_down_rounded,
                       onTap: () => _pageCtrl.nextPage(
                         duration: const Duration(milliseconds: 300),
@@ -621,7 +623,7 @@ class _PhotoGridPage extends StatelessWidget {
                       crossAxisCount: 3, crossAxisSpacing: 6, mainAxisSpacing: 6,
                     ),
                     itemCount: data.length,
-                    itemBuilder: (_, i) => _PhotoThumb(photoId: data[i].key, label: '${data[i].value}条'),
+                    itemBuilder: (_, i) => ReviewPhotoThumb(photoId: data[i].key, label: '${data[i].value}条'),
                   ),
           ),
         ],
@@ -630,134 +632,79 @@ class _PhotoGridPage extends StatelessWidget {
   }
 }
 
-class _PhotoThumb extends StatelessWidget {
-  final String photoId;
-  final String label;
-  const _PhotoThumb({required this.photoId, required this.label});
-
-  @override
-  Widget build(BuildContext context) {
-    return FutureBuilder<AssetEntity?>(
-      future: AssetEntity.fromId(photoId),
-      builder: (_, snap) {
-        if (snap.data == null) {
-          return Container(
-            decoration: BoxDecoration(color: Colors.grey.withValues(alpha: 0.2), borderRadius: BorderRadius.circular(6)),
-            child: const Icon(Icons.image_outlined, size: 24, color: Colors.grey),
-          );
-        }
-        return FutureBuilder<Uint8List?>(
-          future: snap.data!.thumbnailDataWithSize(const ThumbnailSize(200, 200), quality: 70),
-          builder: (_, s) {
-            return ClipRRect(
-              borderRadius: BorderRadius.circular(6),
-              child: Stack(
-                fit: StackFit.expand,
-                children: [
-                  if (s.data != null) Image.memory(s.data!, fit: BoxFit.cover)
-                  else Container(color: Colors.grey.withValues(alpha: 0.2)),
-                  Positioned(
-                    bottom: 0, left: 0, right: 0,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(vertical: 2),
-                      color: Colors.black45,
-                      child: Text(label, textAlign: TextAlign.center,
-                          style: const TextStyle(fontSize: 10, color: Colors.white)),
-                    ),
-                  ),
-                ],
-              ),
-            );
-          },
-        );
-      },
-    );
-  }
-}
-
 // ═══════════════════════════════════════
-//  屏 7：记录文字汇总
+//  屏 7：本月总结
 // ═══════════════════════════════════════
 
 class _TextPage extends StatelessWidget {
   final List<Record> records;
+  final List<MapEntry<String, int>> moods;
   final ColorScheme cs;
-  const _TextPage({required this.records, required this.cs});
+  const _TextPage({required this.records, required this.moods, required this.cs});
 
   @override
   Widget build(BuildContext context) {
+    // 最长的一条记录
+    final longest = records.isEmpty
+        ? null
+        : records.reduce((a, b) => a.content.length >= b.content.length ? a : b);
+    // 最常表达的情绪
+    final topMood = moods.isEmpty ? null : moods.first.key;
+    // 最常用的标签颜色
+    final colorCounts = <int?, int>{};
+    for (final r in records) {
+      if (r.color != null) colorCounts[r.color] = (colorCounts[r.color] ?? 0) + 1;
+    }
+    final topColor = colorCounts.entries.isEmpty
+        ? null
+        : colorCounts.entries.reduce((a, b) => a.value >= b.value ? a : b).key;
+
     return SafeArea(
-      child: Column(
-        children: [
-          const SizedBox(height: 40),
-          Text('✍️ 文字碎片', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w600, color: cs.onSurface)),
-          const SizedBox(height: 8),
-          Text('共 ${records.length} 条记录', style: TextStyle(fontSize: 13, color: cs.onSurfaceVariant)),
-          const SizedBox(height: 16),
-          Expanded(
-            child: records.isEmpty
-                ? Center(child: Text('暂无记录', style: TextStyle(color: cs.onSurfaceVariant)))
-                : ListView.separated(
-                    padding: const EdgeInsets.symmetric(horizontal: 24),
-                    itemCount: records.length,
-                    separatorBuilder: (_, a) => const Divider(height: 1, indent: 0),
-                    itemBuilder: (_, i) {
-                      final r = records[i];
-                      return Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 12),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(r.content, maxLines: 3, overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(fontSize: 14, height: 1.5)),
-                            const SizedBox(height: 4),
-                            Row(
-                              children: [
-                                if (r.mood != null) ...[
-                                  Text(r.mood!, style: TextStyle(fontSize: 11, color: cs.primary.withValues(alpha: 0.7))),
-                                  const SizedBox(width: 8),
-                                ],
-                                Text(_formatDate(r.createdAt),
-                                    style: TextStyle(fontSize: 10, color: cs.onSurfaceVariant.withValues(alpha: 0.5))),
-                              ],
-                            ),
-                          ],
-                        ),
-                      );
-                    },
+      child: Padding(
+        padding: const EdgeInsets.only(bottom: 56),
+        child: SingleChildScrollView(
+          child: Column(
+            children: [
+              const SizedBox(height: 40),
+              Text('✨ 本月总结', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w600, color: cs.onSurface)),
+              const SizedBox(height: 32),
+              if (records.isNotEmpty) ...[
+                SummaryRow(icon: '✍️', label: '写下的记录', value: '${records.length} 条'),
+                const SizedBox(height: 16),
+                if (topMood != null)
+                  SummaryRow(icon: '🎭', label: '最常表达', value: topMood),
+                if (topColor != null) ...[
+                  const SizedBox(height: 16),
+                  ColorRow(color: topColor, cs: cs),
+                ],
+                const SizedBox(height: 32),
+                if (longest != null) ...[
+                  Text('记得最长的一条记录', style: TextStyle(fontSize: 12,
+                      color: cs.onSurfaceVariant.withValues(alpha: 0.5), letterSpacing: 2)),
+                  const SizedBox(height: 12),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: cs.surfaceContainerHighest.withValues(alpha: 0.3),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Text(
+                      longest.content,
+                      style: TextStyle(fontSize: 14, height: 1.6, color: cs.onSurface),
+                    ),
                   ),
+                ],
+              ],
+              if (records.isEmpty)
+                Text('这个月还没有记录', style: TextStyle(fontSize: 14, color: cs.onSurfaceVariant)),
+              const SizedBox(height: 60),
+            ],
           ),
-        ],
-      ),
-    );
-  }
-
-  String _formatDate(DateTime dt) => '${dt.month}/${dt.day}';
-}
-
-/// 翻页导航按钮
-class _NavButton extends StatelessWidget {
-  final IconData icon;
-  final VoidCallback onTap;
-  const _NavButton({required this.icon, required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-    return Container(
-      width: 36, height: 36,
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        color: cs.surface.withValues(alpha: 0.85),
-        boxShadow: [
-          BoxShadow(color: Colors.black.withValues(alpha: 0.1), blurRadius: 4, offset: const Offset(0, 2)),
-        ],
-      ),
-      child: IconButton(
-        padding: EdgeInsets.zero,
-        icon: Icon(icon, size: 22, color: cs.primary.withValues(alpha: 0.8)),
-        onPressed: onTap,
+        ),
       ),
     );
   }
 }
+
+

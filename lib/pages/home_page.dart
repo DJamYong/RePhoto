@@ -10,10 +10,11 @@ import '../providers/preferences_provider.dart';
 import '../providers/theme_provider.dart';
 import '../models/record.dart';
 import '../services/record_service.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import '../services/database_service.dart';
 import '../widgets/record_tile_widget.dart';
 import '../widgets/mood_selector.dart';
 import 'monthly_review_page.dart';
+import 'annual_review_page.dart';
 import 'photo_fullscreen_page.dart';
 import 'settings_page.dart';
 
@@ -48,6 +49,129 @@ Future<void> _checkMonthlyReview(BuildContext context, WidgetRef ref) async {
       ),
     );
   }
+}
+
+/// 弹出回顾选择器
+void _showReviewPicker(BuildContext context) {
+  final now = DateTime.now();
+  final years = List.generate(now.year - 2023, (i) => now.year - i); // 从 2024 到今年
+  showDialog(
+    context: context,
+    builder: (ctx) {
+      int selectedYear = now.year;
+      int yearKey = selectedYear;
+      return StatefulBuilder(
+        builder: (ctx, setDialogState) {
+        return AlertDialog(
+          title: Row(children: [
+            Icon(Icons.bar_chart_outlined, size: 20, color: Theme.of(context).colorScheme.primary),
+            const SizedBox(width: 8),
+            DropdownButton<int>(
+              value: selectedYear,
+              underline: const SizedBox(),
+              icon: Icon(Icons.keyboard_arrow_down_rounded, size: 18,
+                  color: Theme.of(context).colorScheme.onSurfaceVariant),
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500,
+                  color: Theme.of(context).colorScheme.onSurface),
+              dropdownColor: Theme.of(context).colorScheme.surface,
+              borderRadius: BorderRadius.circular(12),
+              elevation: 4,
+              items: years.map((y) => DropdownMenuItem(
+                value: y,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  child: Text('$y 年', style: TextStyle(fontSize: 15)),
+                ),
+              )).toList(),
+              onChanged: (v) => setDialogState(() { selectedYear = v!; yearKey = v; }),
+            ),
+          ]),
+          content: SizedBox(
+            width: double.maxFinite,
+            child: FutureBuilder<List<MapEntry<int, bool>>>(
+              key: ValueKey(yearKey),
+              future: _getAvailableMonths(selectedYear),
+              builder: (context, snapshot) {
+                final months = snapshot.data ?? [];
+                if (months.isEmpty) {
+                  return const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 24),
+                    child: Center(child: Text('暂无数据')),
+                  );
+                }
+                return ListView(
+                  shrinkWrap: true,
+                  children: [
+                    // 年度报告入口 (仅过往年份有数据时显示)
+                    if (selectedYear < now.year && months.where((m) => m.value).isNotEmpty)
+                      _ReviewEntry(
+                        icon: Icons.auto_awesome,
+                        title: '$selectedYear 年度报告',
+                        subtitle: '回顾这一年的回忆',
+                        onTap: () {
+                          Navigator.of(ctx).pop();
+                          Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (_) => AnnualReviewPage(year: selectedYear),
+                            ),
+                          );
+                        },
+                      ),
+                    ...months.where((m) => m.value).map((m) => _ReviewEntry(
+                      icon: Icons.calendar_month_outlined,
+                      title: '$selectedYear 年 ${m.key} 月',
+                      subtitle: '查看月度回忆',
+                      onTap: () {
+                        Navigator.of(ctx).pop();
+                        Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) => MonthlyReviewPage(year: selectedYear, month: m.key),
+                          ),
+                        );
+                      },
+                    )),
+                    if (months.where((m) => m.value).isEmpty)
+                      const Padding(
+                        padding: EdgeInsets.symmetric(vertical: 24),
+                        child: Center(child: Text('该年份暂无回顾数据')),
+                      ),
+                  ],
+                );
+              },
+            ),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.of(ctx).pop(), child: const Text('关闭')),
+          ],
+        );
+      },
+    );
+  },
+);
+}
+
+/// 查询指定年份中有记录的月份
+Future<List<MapEntry<int, bool>>> _getAvailableMonths(int year) async {
+  final start = DateTime(year, 1, 1);
+  final end = DateTime(year + 1, 1, 1);
+  final rows = await DatabaseService.db.rawQuery('''
+    SELECT DISTINCT CAST(strftime('%m', created_at) AS INTEGER) AS month
+    FROM records
+    WHERE created_at >= ? AND created_at < ?
+    ORDER BY month DESC
+  ''', [start.toIso8601String(), end.toIso8601String()]);
+  // 同时查询浏览历史中有数据的月份
+  final viewRows = await DatabaseService.db.rawQuery('''
+    SELECT DISTINCT CAST(strftime('%m', viewed_at) AS INTEGER) AS month
+    FROM view_history
+    WHERE viewed_at >= ? AND viewed_at < ?
+    ORDER BY month DESC
+  ''', [start.toIso8601String(), end.toIso8601String()]);
+  final hasRecord = rows.map((r) => r['month'] as int).toSet();
+  final hasView = viewRows.map((r) => r['month'] as int).toSet();
+  final hasData = hasRecord.union(hasView);
+  final allMonths = List.generate(12, (i) => 12 - i);
+  return allMonths.map((m) => MapEntry(m, hasData.contains(m))).toList();
 }
 
 /// 首页 — 暖色回忆风 · 拍立得照片展示
@@ -96,17 +220,8 @@ class HomePage extends ConsumerWidget {
           actions: [
             IconButton(
               icon: const Icon(Icons.bar_chart_outlined),
-              tooltip: '月度回顾',
-              onPressed: () {
-                final now = DateTime.now();
-                final prevMonth = now.month == 1 ? 12 : now.month - 1;
-                final prevYear = now.month == 1 ? now.year - 1 : now.year;
-                Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (_) => MonthlyReviewPage(year: prevYear, month: prevMonth),
-                  ),
-                );
-              },
+              tooltip: '回顾',
+              onPressed: () => _showReviewPicker(context),
             ),
             IconButton(
               icon: const Icon(Icons.settings_outlined),
@@ -353,5 +468,32 @@ BoxDecoration _pageBackground(BuildContext context) {
   );
 }
 
+/// 回顾选择器中的条目
+class _ReviewEntry extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final VoidCallback onTap;
+  const _ReviewEntry({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.onTap,
+  });
 
-
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return Card(
+      margin: const EdgeInsets.symmetric(vertical: 3),
+      child: ListTile(
+        dense: true,
+        leading: Icon(icon, size: 20, color: cs.primary),
+        title: Text(title, style: const TextStyle(fontSize: 14)),
+        subtitle: Text(subtitle, style: TextStyle(fontSize: 11, color: cs.onSurfaceVariant)),
+        trailing: Icon(Icons.chevron_right, size: 18, color: cs.onSurfaceVariant),
+        onTap: onTap,
+      ),
+    );
+  }
+}

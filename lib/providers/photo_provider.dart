@@ -53,6 +53,7 @@ class RandomPhotoState {
 /// 照片 Provider — 管理权限请求和随机照片状态
 class PhotoProvider extends AsyncNotifier<RandomPhotoState> {
   final _photoService = PhotoService();
+  int _generation = 0;
 
   @override
   Future<RandomPhotoState> build() async {
@@ -100,34 +101,45 @@ class PhotoProvider extends AsyncNotifier<RandomPhotoState> {
   /// 不设置 AsyncLoading，保持当前照片可见直到新照片就绪，
   /// 避免闪烁 loading 转圈。换图后立即后台预加载详情信息。
   Future<void> refresh() async {
+    final gen = ++_generation;
     final next = await _loadRandomPhoto();
     state = AsyncData(next);
 
     // 后台预加载缩略图、文件、EXIF，供详情面板直接使用
     final photo = next.photo;
     if (photo != null) {
-      final thumbFuture = photo.thumbnailDataWithSize(
-        const ThumbnailSize(320, 320),
-        quality: 90,
-      );
-      final fileFuture = photo.file;
-      final results = await Future.wait([thumbFuture, fileFuture]);
-      final thumb = results[0] as Uint8List?;
-      final file = results[1] as File?;
+      try {
+        final thumbFuture = photo.thumbnailDataWithSize(
+          const ThumbnailSize(320, 320),
+          quality: 90,
+        );
+        final fileFuture = photo.file;
+        final results = await Future.wait([thumbFuture, fileFuture]);
 
-      // 有文件后再读取 EXIF
-      Map<String, IfdTag>? exif;
-      if (file != null) {
-        try {
-          exif = await readExifFromFile(file);
-        } catch (_) {}
+        // 预加载期间如果有新的 refresh，丢弃旧结果
+        if (gen != _generation) return;
+
+        final thumb = results[0] as Uint8List?;
+        final file = results[1] as File?;
+
+        // 有文件后再读取 EXIF
+        Map<String, IfdTag>? exif;
+        if (file != null) {
+          try {
+            exif = await readExifFromFile(file);
+          } catch (_) {}
+        }
+
+        if (gen != _generation) return;
+
+        state = AsyncData(next.copyWith(
+          preloadedThumbnail: thumb,
+          preloadedFile: file,
+          preloadedExif: exif,
+        ));
+      } catch (_) {
+        // 预加载失败不影响主界面，详情面板会自行加载
       }
-
-      state = AsyncData(next.copyWith(
-        preloadedThumbnail: thumb,
-        preloadedFile: file,
-        preloadedExif: exif,
-      ));
     }
   }
 
