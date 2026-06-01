@@ -9,6 +9,7 @@ import '../providers/photo_provider.dart';
 import '../providers/preferences_provider.dart';
 import '../providers/theme_provider.dart';
 import '../models/record.dart';
+import '../models/time_collision.dart';
 import '../services/record_service.dart';
 import '../services/database_service.dart';
 import '../widgets/record_tile_widget.dart';
@@ -250,7 +251,7 @@ class HomePage extends ConsumerWidget {
             if (state.errorMessage != null) {
               return _ErrorView(state: state, ref: ref);
             }
-            return _PhotoAlbumView(photo: state.photo!, ref: ref);
+            return _PhotoAlbumView(photo: state.photo!, ref: ref, state: state);
           },
           error: (error, _) => _ErrorView(
             state: RandomPhotoState(errorMessage: '加载失败：$error'),
@@ -397,6 +398,7 @@ class _SlidingPanelState extends State<_SlidingPanel>
                   child: SizedBox(
                     width: panelWidth,
                     child: _PanelBody(
+                      key: ValueKey('panel_${widget.photoAsync.value?.photo?.id}'),
                       photoAsync: widget.photoAsync,
                       panelContentBuilder: widget.panelContentBuilder,
                     ),
@@ -417,6 +419,7 @@ class _PanelBody extends StatelessWidget {
   final Widget Function(RandomPhotoState) panelContentBuilder;
 
   const _PanelBody({
+    super.key,
     required this.photoAsync,
     required this.panelContentBuilder,
   });

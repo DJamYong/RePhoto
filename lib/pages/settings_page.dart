@@ -6,6 +6,8 @@ import '../providers/theme_provider.dart';
 import '../providers/preferences_provider.dart';
 import '../services/view_history_service.dart';
 import '../services/record_service.dart';
+import '../services/photo_service.dart';
+import '../providers/photo_provider.dart';
 import '../models/record.dart';
 import '../widgets/record_tile_widget.dart';
 import '../widgets/mood_selector.dart';
@@ -18,14 +20,17 @@ class SettingsPage extends ConsumerStatefulWidget {
   ConsumerState<SettingsPage> createState() => _SettingsPageState();
 }
 
+bool _sessionShowHidden = false;
+
 class _SettingsPageState extends ConsumerState<SettingsPage> {
   int _versionTapCount = 0;
-  bool _showHiddenButton = false;
+
+  bool get _showHiddenButton => _sessionShowHidden;
 
   void _onVersionTap() {
     _versionTapCount++;
-    if (_versionTapCount >= 10 && !_showHiddenButton) {
-      setState(() => _showHiddenButton = true);
+    if (_versionTapCount >= 10 && !_sessionShowHidden) {
+      setState(() => _sessionShowHidden = true);
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('🔓 已解锁全部记录入口'),
@@ -94,6 +99,51 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
               );
             },
           ),
+
+          const Divider(indent: 16, endIndent: 16),
+
+          // ═══════════════════════════════════
+          //  时间对撞
+          // ═══════════════════════════════════
+          _SectionHeader(
+            title: '时间对撞',
+            icon: Icons.auto_awesome,
+            color: colorScheme.primary,
+          ),
+          SwitchListTile(
+            title: const Text('时间对撞'),
+            subtitle: const Text('随机触发不同年份同月同日的照片对比'),
+            value: ref.watch(collisionPrefsProvider).enabled,
+            activeColor: colorScheme.primary,
+            onChanged: (value) =>
+                ref.read(collisionPrefsProvider.notifier).setEnabled(value),
+          ),
+          if (ref.watch(collisionPrefsProvider).enabled)
+            Padding(
+              padding: const EdgeInsets.only(left: 16, right: 16, bottom: 8),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('触发频率', style: TextStyle(fontSize: 13, color: colorScheme.onSurfaceVariant)),
+                  const SizedBox(height: 4),
+                  SegmentedButton<double>(
+                    segments: const [
+                      ButtonSegment(value: 0.1, label: Text('低', style: TextStyle(fontSize: 13))),
+                      ButtonSegment(value: 0.3, label: Text('中', style: TextStyle(fontSize: 13))),
+                      ButtonSegment(value: 0.5, label: Text('高', style: TextStyle(fontSize: 13))),
+                      ButtonSegment(value: 1.0, label: Text('100%', style: TextStyle(fontSize: 13))),
+                    ],
+                    selected: {ref.watch(collisionPrefsProvider).probability},
+                    onSelectionChanged: (v) =>
+                        ref.read(collisionPrefsProvider.notifier).setProbability(v.first),
+                    style: ButtonStyle(
+                      visualDensity: VisualDensity.compact,
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
+                  ),
+                ],
+              ),
+            ),
 
           const Divider(indent: 16, endIndent: 16),
 
@@ -189,7 +239,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
           if (_showHiddenButton) ...[
             const Divider(indent: 16, endIndent: 16),
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 4),
               child: SizedBox(
                 width: double.infinity,
                 height: 48,
@@ -203,6 +253,38 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(30),
                     ),
+                  ),
+                ),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 4),
+              child: SizedBox(
+                width: double.infinity,
+                height: 48,
+                child: OutlinedButton.icon(
+                  onPressed: () {
+                    Navigator.of(context).pop();
+                    ref.read(photoProvider.notifier).loadCollisionPhoto();
+                  },
+                  icon: const Icon(Icons.auto_awesome),
+                  label: const Text('测试时间对撞'),
+                ),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 4),
+              child: SizedBox(
+                width: double.infinity,
+                height: 48,
+                child: OutlinedButton.icon(
+                  onPressed: () => _showCollisionDiagnostic(context),
+                  icon: const Icon(Icons.search),
+                  label: const Text('诊断对撞数据'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: colorScheme.primary,
+                    side: BorderSide(color: colorScheme.primary.withValues(alpha: 0.4)),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
                   ),
                 ),
               ),
@@ -345,6 +427,67 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     );
   },
 );
+  }
+
+  /// 显示对撞数据诊断
+  void _showCollisionDiagnostic(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (ctx) => FutureBuilder<Map<String, Map<int, int>>>(
+        future: _loadCollisionDiagnostic(),
+        builder: (context, snapshot) {
+          final data = snapshot.data;
+          return AlertDialog(
+            title: Row(children: [
+              Icon(Icons.search, size: 20, color: Theme.of(context).colorScheme.primary),
+              const SizedBox(width: 8),
+              const Text('对撞数据诊断', style: TextStyle(fontSize: 17)),
+            ]),
+            content: SizedBox(
+              width: double.maxFinite,
+              child: data == null
+                  ? const Center(child: CircularProgressIndicator(strokeWidth: 2))
+                  : data.isEmpty
+                      ? const Center(child: Text('没有找到任何时间对撞数据'))
+                      : ListView(
+                          shrinkWrap: true,
+                          children: data.entries.map((entry) {
+                            final dateKey = entry.key;
+                            final yearGroups = entry.value;
+                            return Card(
+                              margin: const EdgeInsets.symmetric(vertical: 4),
+                              child: Padding(
+                                padding: const EdgeInsets.all(12),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(dateKey, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
+                                    const SizedBox(height: 4),
+                                    ...yearGroups.entries.map((e) => Padding(
+                                      padding: const EdgeInsets.symmetric(vertical: 2),
+                                      child: Text('  ${e.key} 年 → ${e.value} 张',
+                                          style: TextStyle(fontSize: 13, color: Theme.of(context).colorScheme.onSurfaceVariant)),
+                                    )),
+                                  ],
+                                ),
+                              ),
+                            );
+                          }).toList(),
+                        ),
+            ),
+            actions: [
+              TextButton(onPressed: () => Navigator.of(ctx).pop(), child: const Text('关闭')),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  Future<Map<String, Map<int, int>>> _loadCollisionDiagnostic() async {
+    final photoService = PhotoService();
+    await photoService.requestPermission();
+    return await photoService.getCollisionDiagnostic();
   }
 
   /// 编辑记录对话框

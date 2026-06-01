@@ -1,5 +1,6 @@
 import 'dart:math';
 import 'package:photo_manager/photo_manager.dart';
+import '../models/time_collision.dart';
 
 /// 相册服务 — 封装相册权限请求与随机照片选取
 class PhotoService {
@@ -130,6 +131,87 @@ class PhotoService {
     }
 
     return allPhotos.last;
+  }
+
+  /// 查找与指定照片同月同日的其他年份照片，按年份分组
+  Future<Map<int, List<AssetEntity>>> findSameDayPhotos(AssetEntity currentPhoto) async {
+    final dt = currentPhoto.createDateTime;
+    final month = dt.month;
+    final day = dt.day;
+
+    // 确保缓存已加载
+    if (_cachedPhotos == null) {
+      final allAlbum = await _getAllAlbum();
+      if (allAlbum == null) return {};
+      _cachedCount = await allAlbum.assetCountAsync;
+      if (_cachedCount == 0) return {};
+      _cachedPhotos = await allAlbum.getAssetListRange(start: 0, end: _cachedCount!);
+    }
+
+    final result = <int, List<AssetEntity>>{};
+    for (final photo in _cachedPhotos!) {
+      final t = photo.createDateTime;
+      if (t.month == month && t.day == day && t.year != dt.year) {
+        result.putIfAbsent(t.year, () => []).add(photo);
+      }
+    }
+    return result;
+  }
+
+  /// 获取时间对撞诊断数据（按月+日分组，仅返回有多个年份的日期）
+  Future<Map<String, Map<int, int>>> getCollisionDiagnostic() async {
+    if (_cachedPhotos == null) {
+      final allAlbum = await _getAllAlbum();
+      if (allAlbum == null) return {};
+      _cachedCount = await allAlbum.assetCountAsync;
+      if (_cachedCount == 0) return {};
+      _cachedPhotos = await allAlbum.getAssetListRange(start: 0, end: _cachedCount!);
+    }
+
+    final groups = <String, Map<int, int>>{};
+    for (final photo in _cachedPhotos!) {
+      final dt = photo.createDateTime;
+      final key = '${dt.month}月${dt.day}日';
+      groups.putIfAbsent(key, () => {});
+      groups[key]![dt.year] = (groups[key]![dt.year] ?? 0) + 1;
+    }
+
+    groups.removeWhere((_, years) => years.length < 2);
+    return groups;
+  }
+
+  /// 查找任意一张能触发时间对撞的照片（测试用）
+  Future<TimeCollision?> findAnyCollision() async {
+    if (_cachedPhotos == null) {
+      final allAlbum = await _getAllAlbum();
+      if (allAlbum == null) return null;
+      _cachedCount = await allAlbum.assetCountAsync;
+      if (_cachedCount == 0) return null;
+      _cachedPhotos = await allAlbum.getAssetListRange(start: 0, end: _cachedCount!);
+    }
+
+    // 按月+日分组，取第一个有多个年份的
+    final groups = <String, Map<int, List<AssetEntity>>>{};
+    for (final photo in _cachedPhotos!) {
+      final dt = photo.createDateTime;
+      final key = '${dt.month}-${dt.day}';
+      groups.putIfAbsent(key, () => {});
+      groups[key]!.putIfAbsent(dt.year, () => []).add(photo);
+    }
+
+    final candidates = groups.entries.where((e) => e.value.length >= 2).toList();
+    if (candidates.isEmpty) return null;
+    // 选照片总数最多的分组（所有年份照片数之和最大）
+    candidates.sort((a, b) {
+      final totalA = a.value.values.fold(0, (s, v) => s + v.length);
+      final totalB = b.value.values.fold(0, (s, v) => s + v.length);
+      return totalB.compareTo(totalA);
+    });
+    final best = candidates.first;
+    final years = best.value.keys.toList()..sort();
+    // 默认选中最新的年份
+    final newestYear = years.last;
+    return TimeCollision(groups: best.value, selectedYear: newestYear);
   }
 
   /// 删除指定照片（从设备相册中彻底移除）

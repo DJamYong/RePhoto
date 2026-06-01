@@ -5,7 +5,8 @@ part of '../home_page.dart';
 class _PhotoAlbumView extends StatefulWidget {
   final AssetEntity photo;
   final WidgetRef ref;
-  const _PhotoAlbumView({required this.photo, required this.ref});
+  final RandomPhotoState state;
+  const _PhotoAlbumView({required this.photo, required this.ref, required this.state});
 
   @override
   State<_PhotoAlbumView> createState() => _PhotoAlbumViewState();
@@ -16,6 +17,16 @@ class _PhotoAlbumViewState extends State<_PhotoAlbumView> {
 
   AssetEntity get photo => widget.photo;
   WidgetRef get ref => widget.ref;
+  RandomPhotoState get state => widget.state;
+
+  @override
+  void didUpdateWidget(_PhotoAlbumView oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // 照片切换时强制刷新记录列表
+    if (oldWidget.photo.id != widget.photo.id) {
+      _recordRefreshKey++;
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -35,17 +46,26 @@ class _PhotoAlbumViewState extends State<_PhotoAlbumView> {
               child: Center(
                 child: SingleChildScrollView(
                   padding: const EdgeInsets.symmetric(horizontal: 24),
-                  child: GestureDetector(
-                    onTap: () => Navigator.of(context).push(
-                      PageRouteBuilder(
-                        pageBuilder: (_, __, ___) => PhotoFullscreenPage(photo: photo),
-                        transitionsBuilder: (_, __, ___, child) => child,
-                        transitionDuration: Duration.zero,
-                        reverseTransitionDuration: Duration.zero,
-                      ),
-                    ),
-                    child: _PolaroidCard(photo: photo),
-                  ),
+                  child: state.collision != null
+                      ? _CollisionCard(
+                          key: ValueKey('collision_${state.photo?.id}'),
+                          collision: state.collision!,
+                          selectedYear: state.selectedYear,
+                          currentPhotoIndex: state.currentPhotoIndex,
+                          onSelectYear: (y) => ref.read(photoProvider.notifier).selectCollisionYear(y),
+                          onPhotoChanged: (i) => ref.read(photoProvider.notifier).selectCollisionPhoto(i),
+                        )
+                      : GestureDetector(
+                          onTap: () => Navigator.of(context).push(
+                            PageRouteBuilder(
+                              pageBuilder: (_, __, ___) => PhotoFullscreenPage(photo: photo),
+                              transitionsBuilder: (_, __, ___, child) => child,
+                              transitionDuration: Duration.zero,
+                              reverseTransitionDuration: Duration.zero,
+                            ),
+                          ),
+                          child: _PolaroidCard(photo: photo),
+                        ),
                 ),
               ),
             ),
@@ -82,7 +102,7 @@ class _PhotoAlbumViewState extends State<_PhotoAlbumView> {
             Padding(
               padding: const EdgeInsets.fromLTRB(0, 0, 0, 12),
               child: FutureBuilder<List<Record>>(
-                key: ValueKey('records_$_recordRefreshKey'),
+                key: ValueKey('records_${photo.id}_$_recordRefreshKey'),
                 future: RecordService.getByPhotoId(photo.id),
                 builder: (context, snapshot) {
                   final records = snapshot.data ?? [];

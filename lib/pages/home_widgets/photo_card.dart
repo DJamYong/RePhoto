@@ -340,3 +340,304 @@ class _PanelPhotoWidgetState extends State<_PanelPhotoWidget> {
     );
   }
 }
+
+// ═══════════════════════════════════════
+//  时间对撞 — 年份分组堆叠卡片
+// ═══════════════════════════════════════
+
+class _CollisionCard extends StatefulWidget {
+  final TimeCollision collision;
+  final int selectedYear;
+  final int currentPhotoIndex;
+  final void Function(int year) onSelectYear;
+  final void Function(int index) onPhotoChanged;
+
+  const _CollisionCard({
+    super.key,
+    required this.collision,
+    required this.selectedYear,
+    required this.currentPhotoIndex,
+    required this.onSelectYear,
+    required this.onPhotoChanged,
+  });
+
+  @override
+  State<_CollisionCard> createState() => _CollisionCardState();
+}
+
+/// 单年份照片堆组件（自管理滚动和分页）
+class _YearPhotoStack extends StatefulWidget {
+  final int year;
+  final List<AssetEntity> photos;
+  final int initialPage;
+  final void Function(int index)? onPageChanged;
+  const _YearPhotoStack({super.key, required this.year, required this.photos, this.initialPage = 0, this.onPageChanged});
+
+  @override
+  State<_YearPhotoStack> createState() => _YearPhotoStackState();
+}
+
+class _YearPhotoStackState extends State<_YearPhotoStack> {
+  late PageController _ctrl;
+  int _page = 0;
+
+  /// 最多同时显示 7 个圆点（含省略号占位）
+  static const int _maxVisibleDots = 7;
+
+  @override
+  void initState() {
+    super.initState();
+    _page = widget.initialPage;
+    _ctrl = PageController(initialPage: widget.initialPage);
+  }
+
+  void _onPageChanged(int p) {
+    if (p != _page && mounted) {
+      setState(() => _page = p);
+      widget.onPageChanged?.call(p);
+    }
+  }
+
+  /// 生成折叠后需要显示的圆点索引列表，数量过多时用 -1 表示省略号
+  List<int> _visibleDotIndices(int count) {
+    if (count <= _maxVisibleDots) return List.generate(count, (i) => i);
+    final result = <int>[];
+    result.add(0); // 始终显示首点
+    // 当前页 ±1 范围，确保不越界也不与首尾重叠
+    final rangeStart = (_page - 1).clamp(1, count - 2);
+    final rangeEnd = (_page + 1).clamp(1, count - 2);
+    if (rangeStart > 1) result.add(-1); // 左省略号
+    for (int i = rangeStart; i <= rangeEnd; i++) {
+      result.add(i);
+    }
+    if (rangeEnd < count - 2) result.add(-1); // 右省略号
+    result.add(count - 1); // 始终显示末点
+    return result;
+  }
+
+  /// 构建折叠式分页圆点指示器，始终不超出 280px 宽度
+  Widget _buildDotIndicator(BuildContext context, int count) {
+    final cs = Theme.of(context).colorScheme;
+    final indices = _visibleDotIndices(count);
+
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: indices.map((i) {
+        if (i == -1) {
+          // 省略号占位（三个小点）
+          return const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 2),
+            child: SizedBox(
+              width: 12,
+              height: 6,
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  _DotPlaceholder(),
+                  SizedBox(width: 2),
+                  _DotPlaceholder(),
+                  SizedBox(width: 2),
+                  _DotPlaceholder(),
+                ],
+              ),
+            ),
+          );
+        }
+        final isActive = i == _page;
+        return AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          width: isActive ? 16 : 6,
+          height: 6,
+          margin: const EdgeInsets.symmetric(horizontal: 2),
+          decoration: BoxDecoration(
+            color: isActive
+                ? cs.primary
+                : cs.onSurfaceVariant.withValues(alpha: 0.3),
+            borderRadius: BorderRadius.circular(3),
+          ),
+        );
+      }).toList(),
+    );
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final photos = widget.photos;
+    final count = photos.length;
+
+    return SizedBox(
+      width: 280,
+      height: 320,
+      child: Column(
+        children: [
+          Expanded(
+            child: Container(
+              decoration: BoxDecoration(
+                color: isDark ? const Color(0xFF3D322C) : Colors.white,
+                borderRadius: BorderRadius.circular(4),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.15),
+                    blurRadius: 12,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
+              ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(4),
+                child: PageView(
+                  controller: _ctrl,
+                  onPageChanged: _onPageChanged,
+                  children: photos.map((photo) => GestureDetector(
+                    onTap: () => Navigator.of(context).push(
+                      PageRouteBuilder(
+                        pageBuilder: (_, a, b) => PhotoFullscreenPage(photo: photo),
+                        transitionsBuilder: (_, a, b, child) => child,
+                        transitionDuration: Duration.zero,
+                        reverseTransitionDuration: Duration.zero,
+                      ),
+                    ),
+                    child: Padding(
+                      padding: const EdgeInsets.all(8),
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(2),
+                        child: AspectRatio(
+                          aspectRatio: 1,
+                          child: _PhotoWidget(photo: photo),
+                        ),
+                      ),
+                    ),
+                  )).toList(),
+                ),
+              ),
+            ),
+          ),
+          if (count > 1)
+            Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: _buildDotIndicator(context, count),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _CollisionCardState extends State<_CollisionCard> {
+
+  Widget _buildPhotoStack(int year) {
+    final isCurrentYear = year == widget.selectedYear;
+    final photos = widget.collision.groups[year]!;
+    return _YearPhotoStack(
+      key: ValueKey('stack_${year}_${photos.length}_${isCurrentYear ? widget.currentPhotoIndex : 0}'),
+      year: year,
+      photos: photos,
+      initialPage: isCurrentYear ? widget.currentPhotoIndex : 0,
+      onPageChanged: widget.onPhotoChanged,
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final years = widget.collision.years;
+    final currentYear = widget.selectedYear;
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        _buildPhotoStack(currentYear),
+        const SizedBox(height: 16),
+        // 年份切换按钮
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          alignment: WrapAlignment.center,
+          children: years.map((year) {
+            final isSelected = year == currentYear;
+            return GestureDetector(
+              onTap: () => widget.onSelectYear(year),
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 200),
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                decoration: BoxDecoration(
+                  color: isSelected ? cs.primary : Colors.transparent,
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(
+                    color: isSelected ? cs.primary : cs.outlineVariant.withValues(alpha: 0.3),
+                  ),
+                  boxShadow: isSelected ? [
+                    BoxShadow(color: cs.primary.withValues(alpha: 0.3), blurRadius: 6, offset: const Offset(0, 2)),
+                  ] : null,
+                ),
+                child: Text('$year', style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+                  color: isSelected ? cs.onPrimary : cs.onSurface,
+                )),
+              ),
+            );
+          }).toList(),
+        ),
+        const SizedBox(height: 8),
+        // 当前年份信息
+        AnimatedSwitcher(
+          duration: const Duration(milliseconds: 200),
+          child: Column(
+            key: ValueKey('${currentYear}_${widget.currentPhotoIndex}'),
+            children: [
+              Text(
+                _buildCurrentDate(),
+                style: TextStyle(fontSize: 14, color: cs.onSurfaceVariant.withValues(alpha: 0.7),
+                    letterSpacing: 2, fontStyle: FontStyle.italic),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                '共 ${widget.collision.groups[currentYear]!.length} 张',
+                style: TextStyle(fontSize: 13, color: cs.onSurfaceVariant.withValues(alpha: 0.5)),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// 获取当前查看照片的日期字符串
+  String _buildCurrentDate() {
+    final currentYear = widget.selectedYear;
+    final photos = widget.collision.groups[currentYear]!;
+    final idx = widget.currentPhotoIndex.clamp(0, photos.length - 1);
+    return _formatDate(photos[idx].createDateTime);
+  }
+
+  String _formatDate(DateTime date) {
+    return '${date.year}.${date.month.toString().padLeft(2, '0')}.${date.day.toString().padLeft(2, '0')}';
+  }
+}
+
+/// 省略号中的小圆点占位（用于折叠式分页指示器）
+class _DotPlaceholder extends StatelessWidget {
+  const _DotPlaceholder();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 2,
+      height: 2,
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.onSurfaceVariant.withValues(alpha: 0.3),
+        shape: BoxShape.circle,
+      ),
+    );
+  }
+}
+
+
