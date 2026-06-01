@@ -7,10 +7,13 @@ import 'package:photo_manager/photo_manager.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../providers/photo_provider.dart';
 import '../providers/preferences_provider.dart';
+import '../providers/theme_provider.dart';
 import '../models/record.dart';
 import '../services/record_service.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../widgets/record_tile_widget.dart';
 import '../widgets/mood_selector.dart';
+import 'monthly_review_page.dart';
 import 'photo_fullscreen_page.dart';
 import 'settings_page.dart';
 
@@ -19,6 +22,34 @@ part 'home_widgets/photo_card.dart';
 part 'home_widgets/detail_panel.dart';
 part 'home_widgets/photo_album_view.dart';
 
+bool _reviewChecked = false;
+
+/// 检查并弹出月度回顾
+Future<void> _checkMonthlyReview(BuildContext context, WidgetRef ref) async {
+  final prefs = ref.read(sharedPrefsProvider);
+  final now = DateTime.now();
+  final key = 'lastReviewShownMonth';
+
+  // 只在每月 1 号检查
+  if (now.day != 1) return;
+
+  final lastShown = prefs.getString(key);
+  final thisMonth = '${now.year}-${now.month}';
+  if (lastShown == thisMonth) return;
+
+  await prefs.setString(key, thisMonth);
+  final prevMonth = now.month == 1 ? 12 : now.month - 1;
+  final prevYear = now.month == 1 ? now.year - 1 : now.year;
+
+  if (context.mounted) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => MonthlyReviewPage(year: prevYear, month: prevMonth),
+      ),
+    );
+  }
+}
+
 /// 首页 — 暖色回忆风 · 拍立得照片展示
 class HomePage extends ConsumerWidget {
   const HomePage({super.key});
@@ -26,6 +57,14 @@ class HomePage extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final stateAsync = ref.watch(photoProvider);
+
+    // 每月首次启动时检查回顾（只触发一次）
+    ref.listen(photoProvider, (_, next) {
+      if (next.hasValue && !_reviewChecked) {
+        _reviewChecked = true;
+        _checkMonthlyReview(context, ref);
+      }
+    });
 
     return _SlidingPanel(
       panelContentBuilder: (s) => _DrawerContent(
@@ -55,6 +94,20 @@ class HomePage extends ConsumerWidget {
             ),
           ),
           actions: [
+            IconButton(
+              icon: const Icon(Icons.bar_chart_outlined),
+              tooltip: '月度回顾',
+              onPressed: () {
+                final now = DateTime.now();
+                final prevMonth = now.month == 1 ? 12 : now.month - 1;
+                final prevYear = now.month == 1 ? now.year - 1 : now.year;
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => MonthlyReviewPage(year: prevYear, month: prevMonth),
+                  ),
+                );
+              },
+            ),
             IconButton(
               icon: const Icon(Icons.settings_outlined),
               tooltip: '设置',
