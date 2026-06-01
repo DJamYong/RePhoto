@@ -151,7 +151,7 @@ class PhotoService {
     final result = <int, List<AssetEntity>>{};
     for (final photo in _cachedPhotos!) {
       final t = photo.createDateTime;
-      if (t.month == month && t.day == day && t.year != dt.year) {
+      if (t.month == month && t.day == day) {
         result.putIfAbsent(t.year, () => []).add(photo);
       }
     }

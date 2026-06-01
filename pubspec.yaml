@@ -42,6 +42,9 @@ dependencies:
   photo_manager: ^3.3.0
   exif: ^3.3.0
   google_fonts: ^6.2.1
+  share_plus: ^10.1.4
+  file_picker: ^10.0.0
+  path_provider: ^2.1.5
 
 dev_dependencies:
   flutter_test:

@@ -1,12 +1,17 @@
+import 'dart:io';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:photo_manager/photo_manager.dart';
+import 'package:share_plus/share_plus.dart';
+import 'package:file_picker/file_picker.dart';
+import 'package:path_provider/path_provider.dart';
 import '../providers/theme_provider.dart';
 import '../providers/preferences_provider.dart';
 import '../services/view_history_service.dart';
 import '../services/record_service.dart';
 import '../services/photo_service.dart';
+import '../services/backup_service.dart';
 import '../providers/photo_provider.dart';
 import '../models/record.dart';
 import '../widgets/record_tile_widget.dart';
@@ -212,6 +217,49 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
             activeColor: colorScheme.primary,
             onChanged: (value) =>
                 ref.read(themeModeProvider.notifier).set(value ?? ThemeMode.system),
+          ),
+
+          const Divider(indent: 16, endIndent: 16),
+
+          // ─── 数据备份 ───
+          _SectionHeader(
+            title: '数据备份',
+            icon: Icons.cloud_upload_outlined,
+            color: colorScheme.primary,
+          ),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+            child: Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: () => _exportBackup(context),
+                    icon: const Icon(Icons.file_upload_outlined, size: 18),
+                    label: const Text('导出'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: colorScheme.primary,
+                      side: BorderSide(color: colorScheme.primary.withValues(alpha: 0.4)),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: () => _importBackup(context),
+                    icon: const Icon(Icons.file_download_outlined, size: 18),
+                    label: const Text('导入'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: colorScheme.primary,
+                      side: BorderSide(color: colorScheme.primary.withValues(alpha: 0.4)),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ),
 
           const Divider(indent: 16, endIndent: 16),
@@ -655,6 +703,90 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
       ),
     );
     overlay.insert(entry);
+  }
+
+  /// 导出数据备份
+  Future<void> _exportBackup(BuildContext context) async {
+    try {
+      final json = await BackupService.exportToJson();
+      final dir = await getTemporaryDirectory();
+      final file = File(
+        '${dir.path}/rephoto_backup_${DateTime.now().toIso8601String().substring(0, 10)}.json',
+      );
+      await file.writeAsString(json);
+
+      await Share.shareXFiles(
+        [XFile(file.path)],
+        subject: 'RePhoto 数据备份',
+      );
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('导出失败：$e')),
+        );
+      }
+    }
+  }
+
+  /// 导入数据备份 — 选择 JSON 文件
+  Future<void> _importBackup(BuildContext context) async {
+    try {
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['json'],
+      );
+      if (result == null || result.files.isEmpty) return;
+
+      final file = File(result.files.single.path!);
+      final json = await file.readAsString();
+
+      final validation = BackupService.validate(json);
+      if (!validation.isValid) {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(validation.error!)),
+          );
+        }
+        return;
+      }
+
+      if (!context.mounted) return;
+      final mode = await showDialog<MergeMode>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('确认导入'),
+          content: Text(
+            '发现 ${validation.recordCount} 条记录、${validation.historyCount} 条浏览历史。\n\n'
+            '选择导入模式：',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(MergeMode.merge),
+              child: const Text('合并（跳过重复）'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(ctx).pop(MergeMode.overwrite),
+              child: const Text('覆盖（清空后导入）'),
+            ),
+          ],
+        ),
+      );
+      if (mode == null) return;
+
+      await BackupService.importFromJson(json, mode, validation.rawData!);
+
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('导入成功')),
+        );
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('导入失败：$e')),
+        );
+      }
+    }
   }
 }
 
