@@ -308,9 +308,13 @@ class _PanelPhotoWidgetState extends State<_PanelPhotoWidget> {
   @override
   void didUpdateWidget(_PanelPhotoWidget oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.photo.id != widget.photo.id) {
-      _imageBytes = widget.preloadedBytes; // 新照片的预加载数据
-      if (_imageBytes == null) _loadImage();
+    // 优先使用预加载数据（可能晚于 widget 创建到达）
+    if (widget.preloadedBytes != null) {
+      _imageBytes = widget.preloadedBytes;
+    } else if (oldWidget.photo.id != widget.photo.id) {
+      // 照片变了且没有预加载数据，启动 fallback
+      _imageBytes = null;
+      _loadImage();
     }
   }
 

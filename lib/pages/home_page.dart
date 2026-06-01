@@ -59,7 +59,6 @@ void _showReviewPicker(BuildContext context) {
     context: context,
     builder: (ctx) {
       int selectedYear = now.year;
-      int yearKey = selectedYear;
       return StatefulBuilder(
         builder: (ctx, setDialogState) {
         return AlertDialog(
@@ -83,13 +82,12 @@ void _showReviewPicker(BuildContext context) {
                   child: Text('$y 年', style: TextStyle(fontSize: 15)),
                 ),
               )).toList(),
-              onChanged: (v) => setDialogState(() { selectedYear = v!; yearKey = v; }),
+              onChanged: (v) => setDialogState(() { selectedYear = v!; }),
             ),
           ]),
           content: SizedBox(
             width: double.maxFinite,
             child: FutureBuilder<List<MapEntry<int, bool>>>(
-              key: ValueKey(yearKey),
               future: _getAvailableMonths(selectedYear),
               builder: (context, snapshot) {
                 final months = snapshot.data ?? [];

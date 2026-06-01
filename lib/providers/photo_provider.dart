@@ -108,38 +108,37 @@ class PhotoProvider extends AsyncNotifier<RandomPhotoState> {
     // 后台预加载缩略图、文件、EXIF，供详情面板直接使用
     final photo = next.photo;
     if (photo != null) {
+      // 各自独立加载，互不影响 — 单个失败不影响其他
+      Uint8List? thumb;
       try {
-        final thumbFuture = photo.thumbnailDataWithSize(
-          const ThumbnailSize(320, 320),
-          quality: 90,
+        thumb = await photo.thumbnailDataWithSize(
+          const ThumbnailSize(320, 320), quality: 90,
         );
-        final fileFuture = photo.file;
-        final results = await Future.wait([thumbFuture, fileFuture]);
+      } catch (_) {}
 
-        // 预加载期间如果有新的 refresh，丢弃旧结果
-        if (gen != _generation) return;
+      if (gen != _generation) return;
 
-        final thumb = results[0] as Uint8List?;
-        final file = results[1] as File?;
+      File? file;
+      try {
+        file = await photo.file;
+      } catch (_) {}
 
-        // 有文件后再读取 EXIF
-        Map<String, IfdTag>? exif;
-        if (file != null) {
-          try {
-            exif = await readExifFromFile(file);
-          } catch (_) {}
-        }
+      if (gen != _generation) return;
 
-        if (gen != _generation) return;
-
-        state = AsyncData(next.copyWith(
-          preloadedThumbnail: thumb,
-          preloadedFile: file,
-          preloadedExif: exif,
-        ));
-      } catch (_) {
-        // 预加载失败不影响主界面，详情面板会自行加载
+      Map<String, IfdTag>? exif;
+      if (file != null) {
+        try {
+          exif = await readExifFromFile(file);
+        } catch (_) {}
       }
+
+      if (gen != _generation) return;
+
+      state = AsyncData(next.copyWith(
+        preloadedThumbnail: thumb,
+        preloadedFile: file,
+        preloadedExif: exif,
+      ));
     }
   }
 
