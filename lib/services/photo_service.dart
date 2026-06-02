@@ -201,17 +201,11 @@ class PhotoService {
 
     final candidates = groups.entries.where((e) => e.value.length >= 2).toList();
     if (candidates.isEmpty) return null;
-    // 选照片总数最多的分组（所有年份照片数之和最大）
-    candidates.sort((a, b) {
-      final totalA = a.value.values.fold(0, (s, v) => s + v.length);
-      final totalB = b.value.values.fold(0, (s, v) => s + v.length);
-      return totalB.compareTo(totalA);
-    });
-    final best = candidates.first;
-    final years = best.value.keys.toList()..sort();
-    // 默认选中最新的年份
+    // 随机选一组对撞数据
+    final pick = candidates[Random().nextInt(candidates.length)];
+    final years = pick.value.keys.toList()..sort();
     final newestYear = years.last;
-    return TimeCollision(groups: best.value, selectedYear: newestYear);
+    return TimeCollision(groups: pick.value, selectedYear: newestYear);
   }
 
   /// 删除指定照片（从设备相册中彻底移除）

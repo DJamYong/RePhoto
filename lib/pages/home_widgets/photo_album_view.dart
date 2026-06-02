@@ -44,7 +44,7 @@ class _PhotoAlbumViewState extends State<_PhotoAlbumView> {
             const SizedBox(height: 8),
             Expanded(
               child: Center(
-                child: SingleChildScrollView(
+                child: Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 24),
                   child: state.collision != null
                       ? _CollisionCard(
@@ -69,9 +69,10 @@ class _PhotoAlbumViewState extends State<_PhotoAlbumView> {
                 ),
               ),
             ),
+            const SizedBox(height: 8),
             // 删除按钮
             Padding(
-              padding: const EdgeInsets.fromLTRB(0, 0, 0, 50),
+              padding: const EdgeInsets.fromLTRB(0, 0, 0, 30),
               child: Center(
                 child: SizedBox(width: 44, height: 44,
                   child: IconButton(
@@ -107,7 +108,7 @@ class _PhotoAlbumViewState extends State<_PhotoAlbumView> {
             ),
             // 记录按钮 + 全部记录
             Padding(
-              padding: const EdgeInsets.fromLTRB(0, 0, 0, 12),
+              padding: const EdgeInsets.fromLTRB(0, 0, 0, 8),
               child: FutureBuilder<List<Record>>(
                 key: ValueKey('records_${photo.id}_$_recordRefreshKey'),
                 future: RecordService.getByPhotoId(photo.id),
@@ -144,7 +145,7 @@ class _PhotoAlbumViewState extends State<_PhotoAlbumView> {
             ),
             // 换一张
             Padding(
-              padding: const EdgeInsets.fromLTRB(24, 4, 24, 24),
+              padding: const EdgeInsets.fromLTRB(24, 4, 24, 16),
               child: SizedBox(width: 200, height: 48,
                 child: FilledButton.icon(
                   onPressed: () => ref.read(photoProvider.notifier).refresh(),
@@ -174,14 +175,16 @@ class _PhotoAlbumViewState extends State<_PhotoAlbumView> {
     await showDialog(
       context: context,
       builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setDialogState) => AlertDialog(
-          title: Row(children: [
-            Icon(isEditing ? Icons.edit_outlined : Icons.edit_note_outlined, size: 20, color: cs.primary),
-            const SizedBox(width: 8),
-            Text(isEditing ? '编辑记录' : '新增记录', style: const TextStyle(fontSize: 17)),
-          ]),
-          content: SingleChildScrollView(
-            child: Form(
+        builder: (ctx, setDialogState) => GestureDetector(
+          onTap: () => FocusScope.of(ctx).unfocus(),
+          child: AlertDialog(
+            title: Row(children: [
+              Icon(isEditing ? Icons.edit_outlined : Icons.edit_note_outlined, size: 20, color: cs.primary),
+              const SizedBox(width: 8),
+              Text(isEditing ? '编辑记录' : '新增记录', style: const TextStyle(fontSize: 17)),
+            ]),
+            content: SingleChildScrollView(
+              child: Form(
               key: formKey,
               child: SizedBox(
                 width: double.maxFinite,
@@ -277,6 +280,7 @@ class _PhotoAlbumViewState extends State<_PhotoAlbumView> {
               child: const Text('保存'),
             ),
           ],
+          ),
         ),
       ),
     );

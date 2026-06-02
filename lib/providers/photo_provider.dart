@@ -95,7 +95,7 @@ class PhotoProvider extends AsyncNotifier<RandomPhotoState> {
 
     // 2. 加权随机选取一张照片（近30天看得越少权重越高）
     final recentViews = await ViewHistoryService.getRecentViewCounts();
-    final photo = await _photoService.getWeightedRandomPhoto(recentViews);
+    var photo = await _photoService.getWeightedRandomPhoto(recentViews);
     if (photo == null) {
       return const RandomPhotoState(
         hasPermission: true,
@@ -122,6 +122,8 @@ class PhotoProvider extends AsyncNotifier<RandomPhotoState> {
           final years = groups.keys.toList()..sort();
           final newestYear = years.last;
           collision = TimeCollision(groups: groups, selectedYear: newestYear);
+          // photo 切到碰撞卡片实际展示的第一张，详情面板才能匹配
+          photo = collision.currentPhoto;
         }
       }
     }
@@ -227,7 +229,14 @@ class PhotoProvider extends AsyncNotifier<RandomPhotoState> {
     if (gen != _generation) return;
 
     Map<String, IfdTag>? exif;
-    if (file != null) {
+    try {
+      // iOS: originBytes 比 photo.file 更可靠（HEIC 兼容）
+      final bytes = await photo.originBytes;
+      if (bytes != null) {
+        exif = await readExifFromBytes(bytes);
+      }
+    } catch (_) {}
+    if (exif == null && file != null) {
       try {
         exif = await readExifFromFile(file);
       } catch (_) {}

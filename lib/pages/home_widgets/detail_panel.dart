@@ -214,7 +214,7 @@ class _DrawerContent extends StatelessWidget {
   }
 }
 
-/// 异步加载文件大小组件
+/// 异步加载文件大小组件 — iOS 优先用 originBytes 避免 HEIC 兼容问题
 class _FileSizeTile extends StatelessWidget {
   final AssetEntity photo;
   final ColorScheme colorScheme;
@@ -231,16 +231,24 @@ class _FileSizeTile extends StatelessWidget {
     if (preloadedFile != null) {
       return _buildTile(preloadedFile!.lengthSync());
     }
-    return FutureBuilder<File?>(
-      future: photo.file,
+    return FutureBuilder<int?>(
+      future: _loadFileSize(),
       builder: (context, snapshot) {
-        final fileBytes = (snapshot.connectionState == ConnectionState.done &&
-                snapshot.data != null)
-            ? snapshot.data!.lengthSync()
-            : null;
-        return _buildTile(fileBytes);
+        return _buildTile(snapshot.data);
       },
     );
+  }
+
+  Future<int?> _loadFileSize() async {
+    try {
+      final bytes = await photo.originBytes;
+      if (bytes != null) return bytes.length;
+    } catch (_) {}
+    try {
+      final file = await photo.file;
+      if (file != null) return file.lengthSync();
+    } catch (_) {}
+    return null;
   }
 
   Widget _buildTile(int? fileBytes) {
@@ -353,13 +361,21 @@ class _ExifTile extends StatelessWidget {
   }
 
   Future<Map<String, IfdTag>?> _loadExif() async {
+    // 优先用 originBytes（iOS 上比 photo.file 更可靠，HEIC 兼容）
     try {
-      final file = preloadedFile ?? await photo.file;
-      if (file == null) return null;
-      return await readExifFromFile(file);
-    } catch (_) {
-      return null;
-    }
+      if (preloadedFile != null) {
+        return await readExifFromFile(preloadedFile!);
+      }
+    } catch (_) {}
+    try {
+      final bytes = await photo.originBytes;
+      if (bytes != null) return await readExifFromBytes(bytes);
+    } catch (_) {}
+    try {
+      final file = await photo.file;
+      if (file != null) return await readExifFromFile(file);
+    } catch (_) {}
+    return null;
   }
 
   String _formatExifValue(String key, String raw) {
