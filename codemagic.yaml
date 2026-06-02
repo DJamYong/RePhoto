@@ -19,11 +19,7 @@ workflows:
           cd ios && pod install
       - name: Build iOS (unsigned)
         script: flutter build ios --no-codesign --release
-      - name: Pack IPA
-        script: |
-          rm -rf Payload
-          cp -r build/ios/iphoneos/Runner.app Payload
-          zip -r RePhoto.ipa Payload
-          ls -lh RePhoto.ipa
+      - name: Package
+        script: zip -r Runner.zip build/ios/iphoneos/Runner.app
     artifacts:
-      - RePhoto.ipa
+      - Runner.zip
