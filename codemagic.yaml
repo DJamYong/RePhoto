@@ -21,9 +21,8 @@ workflows:
         script: flutter build ios --no-codesign --release
       - name: Pack IPA
         script: |
-          mkdir -p Payload
+          mkdir Payload
           cp -r build/ios/iphoneos/Runner.app Payload/
-          zip -r unsigned_app.ipa Payload
-          rm -rf Payload
+          zip -r RePhoto.ipa Payload
     artifacts:
-      - unsigned_app.ipa
+      - RePhoto.ipa
