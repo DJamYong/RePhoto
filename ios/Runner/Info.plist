@@ -6,10 +6,12 @@
 	<true/>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>RePhoto 需要访问您的相册以随机展示照片，唤起美好回忆</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>RePhoto 需要写入权限以删除您确认移除的照片</string>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
-	<string>Rephoto</string>
+	<string>江江江江!</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>

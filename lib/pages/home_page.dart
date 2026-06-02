@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:exif/exif.dart';
 import 'package:photo_manager/photo_manager.dart';
-import 'package:google_fonts/google_fonts.dart';
 import '../providers/photo_provider.dart';
 import '../providers/preferences_provider.dart';
 import '../providers/theme_provider.dart';
@@ -211,10 +210,10 @@ class HomePage extends ConsumerWidget {
           ),
           title: Text(
             'RePhoto',
-            style: GoogleFonts.dancingScript(
+            style: const TextStyle(
+              fontFamily: 'DancingScript',
               fontWeight: FontWeight.w500,
-              color: Theme.of(context).colorScheme.primary,
-            ),
+            ).copyWith(color: Theme.of(context).colorScheme.primary),
           ),
           actions: [
             IconButton(

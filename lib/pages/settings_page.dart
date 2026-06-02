@@ -50,7 +50,6 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
   Widget build(BuildContext context) {
     final ref = this.ref;
     final themeMode = ref.watch(themeModeProvider);
-    final photoPrefs = ref.watch(photoDisplayPrefsProvider);
     final colorScheme = Theme.of(context).colorScheme;
 
     return Scaffold(
@@ -152,34 +151,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
 
           const Divider(indent: 16, endIndent: 16),
 
-          // ═══════════════════════════════════
-          //  照片信息 — 控制主页卡片显示哪些元数据
-          // ═══════════════════════════════════
-          _SectionHeader(
-            title: '照片信息',
-            icon: Icons.photo_outlined,
-            color: colorScheme.primary,
-          ),
-          SwitchListTile(
-            secondary: const Icon(Icons.calendar_today),
-            title: const Text('显示拍摄日期'),
-            subtitle: const Text('在照片卡片下方显示拍摄日期'),
-            value: photoPrefs.showDate,
-            activeTrackColor: colorScheme.primary.withValues(alpha: 0.5),
-            activeThumbColor: colorScheme.primary,
-            onChanged: (value) =>
-                ref.read(photoDisplayPrefsProvider.notifier).setShowDate(value),
-          ),
-          SwitchListTile(
-            secondary: const Icon(Icons.schedule_outlined),
-            title: const Text('照片年龄'),
-            subtitle: const Text('显示拍摄距离今天多久时间'),
-            value: photoPrefs.showAge,
-            activeTrackColor: colorScheme.primary.withValues(alpha: 0.5),
-            activeThumbColor: colorScheme.primary,
-            onChanged: (value) =>
-                ref.read(photoDisplayPrefsProvider.notifier).setShowAge(value),
-          ),
+          const _PhotoInfoSection(),
 
           const Divider(indent: 16, endIndent: 16),
 
@@ -975,6 +947,48 @@ class _PhotoThumb extends StatelessWidget {
           },
         );
       },
+    );
+  }
+}
+
+/// 照片信息开关区 — 独立 ConsumerWidget，隔离于时间对撞 Provider 避免闪烁
+class _PhotoInfoSection extends ConsumerWidget {
+  const _PhotoInfoSection();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final prefs = ref.watch(photoDisplayPrefsProvider);
+    final cs = Theme.of(context).colorScheme;
+
+    return Column(
+      children: [
+        const Divider(indent: 16, endIndent: 16),
+        _SectionHeader(
+          title: '照片信息',
+          icon: Icons.photo_outlined,
+          color: cs.primary,
+        ),
+        SwitchListTile(
+          secondary: const Icon(Icons.calendar_today),
+          title: const Text('显示拍摄日期'),
+          subtitle: const Text('在照片卡片下方显示拍摄日期'),
+          value: prefs.showDate,
+          activeTrackColor: cs.primary.withValues(alpha: 0.5),
+          activeThumbColor: cs.primary,
+          onChanged: (v) =>
+              ref.read(photoDisplayPrefsProvider.notifier).setShowDate(v),
+        ),
+        SwitchListTile(
+          secondary: const Icon(Icons.schedule_outlined),
+          title: const Text('照片年龄'),
+          subtitle: const Text('显示拍摄距离今天多久时间'),
+          value: prefs.showAge,
+          activeTrackColor: cs.primary.withValues(alpha: 0.5),
+          activeThumbColor: cs.primary,
+          onChanged: (v) =>
+              ref.read(photoDisplayPrefsProvider.notifier).setShowAge(v),
+        ),
+      ],
     );
   }
 }
