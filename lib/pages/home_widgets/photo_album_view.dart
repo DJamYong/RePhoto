@@ -89,7 +89,14 @@ class _PhotoAlbumViewState extends State<_PhotoAlbumView> {
                           ],
                         ),
                       );
-                      if (confirmed == true) ref.read(photoProvider.notifier).deleteCurrentPhoto();
+                      if (confirmed == true) {
+                        final ok = await ref.read(photoProvider.notifier).deleteCurrentPhoto();
+                        if (!ok && mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('删除失败，请检查相册权限')),
+                          );
+                        }
+                      }
                     },
                     icon: const Icon(Icons.delete_outline, size: 20),
                     tooltip: '删除照片',
