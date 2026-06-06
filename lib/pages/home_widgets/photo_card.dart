@@ -72,22 +72,50 @@ class _PolaroidCardState extends ConsumerState<_PolaroidCard> {
             duration: const Duration(milliseconds: 150),
             curve: Curves.easeOutCubic,
             decoration: BoxDecoration(
-              color: isDark ? const Color(0xFF3D322C) : Colors.white,
+              gradient: isDark
+                  ? const LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [
+                        Color(0xFF4A3F35),
+                        Color(0xFF3D322C),
+                        Color(0xFF342A24),
+                      ],
+                    )
+                  : const LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [
+                        Color(0xFFFFFEFB),
+                        Color(0xFFF8F5F1),
+                        Color(0xFFF2EDE7),
+                      ],
+                    ),
               borderRadius: BorderRadius.circular(4),
               boxShadow: [
+                // 远距离环境阴影 — 模拟照片与桌面之间的空间感
                 BoxShadow(
                   color: isDark
-                      ? Colors.black.withValues(alpha: 0.3)
-                      : const Color(0xFF5C4033).withValues(alpha: 0.15),
-                  blurRadius: 20,
-                  offset: const Offset(0, 8),
+                      ? Colors.black.withValues(alpha: 0.35)
+                      : const Color(0xFF5C4033).withValues(alpha: 0.12),
+                  blurRadius: 32,
+                  offset: const Offset(0, 14),
                 ),
+                // 中距离阴影 — 卡片厚度
                 BoxShadow(
                   color: isDark
-                      ? Colors.black.withValues(alpha: 0.2)
+                      ? Colors.black.withValues(alpha: 0.25)
                       : const Color(0xFF5C4033).withValues(alpha: 0.08),
-                  blurRadius: 6,
-                  offset: const Offset(0, 2),
+                  blurRadius: 12,
+                  offset: const Offset(0, 6),
+                ),
+                // 近距离阴影 — 边缘清晰度
+                BoxShadow(
+                  color: isDark
+                      ? Colors.black.withValues(alpha: 0.15)
+                      : const Color(0xFF5C4033).withValues(alpha: 0.05),
+                  blurRadius: 3,
+                  offset: const Offset(0, 1),
                 ),
               ],
             ),
@@ -98,13 +126,39 @@ class _PolaroidCardState extends ConsumerState<_PolaroidCard> {
                   padding: const EdgeInsets.all(12),
                   child: ClipRRect(
                     borderRadius: BorderRadius.circular(2),
-                    child: Stack(
-                      children: [
-                        AspectRatio(
-                          aspectRatio: 1,
-                          child: _PhotoWidget(photo: widget.photo),
+                    child: Container(
+                      decoration: BoxDecoration(
+                        border: Border.all(
+                          color: isDark
+                              ? Colors.white.withValues(alpha: 0.06)
+                              : Colors.black.withValues(alpha: 0.07),
+                          width: 1,
                         ),
-                        if (isHistoricalMoment)
+                      ),
+                      child: Stack(
+                        children: [
+                          AspectRatio(
+                            aspectRatio: 1,
+                            child: _PhotoWidget(photo: widget.photo),
+                          ),
+                          // 暗角叠加 — 模拟镜头边缘减光 / 冲印质感
+                          Positioned.fill(
+                            child: IgnorePointer(
+                              child: Container(
+                                decoration: BoxDecoration(
+                                  gradient: RadialGradient(
+                                    center: const Alignment(0, 0),
+                                    radius: 0.75,
+                                    colors: [
+                                      Colors.transparent,
+                                      Colors.black.withValues(alpha: isDark ? 0.25 : 0.15),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                          if (isHistoricalMoment)
                           Positioned(
                             top: 8,
                             left: 8,
@@ -148,6 +202,7 @@ class _PolaroidCardState extends ConsumerState<_PolaroidCard> {
                     ),
                   ),
                 ),
+              ),
                 if (showBottom)
                   Container(
                     width: double.infinity,
@@ -531,20 +586,48 @@ class _YearPhotoStackState extends State<_YearPhotoStack> {
     final count = photos.length;
 
     return SizedBox(
-      width: 280,
+      width: 320,
       height: 320,
       child: Column(
         children: [
           Expanded(
             child: Container(
               decoration: BoxDecoration(
-                color: isDark ? const Color(0xFF3D322C) : Colors.white,
+                gradient: isDark
+                    ? const LinearGradient(
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                        colors: [
+                          Color(0xFF4A3F35),
+                          Color(0xFF3D322C),
+                          Color(0xFF342A24),
+                        ],
+                      )
+                    : const LinearGradient(
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                        colors: [
+                          Color(0xFFFFFEFB),
+                          Color(0xFFF8F5F1),
+                          Color(0xFFF2EDE7),
+                        ],
+                      ),
                 borderRadius: BorderRadius.circular(4),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.15),
-                    blurRadius: 12,
+                    color: Colors.black.withValues(alpha: 0.2),
+                    blurRadius: 24,
+                    offset: const Offset(0, 10),
+                  ),
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.1),
+                    blurRadius: 8,
                     offset: const Offset(0, 4),
+                  ),
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.05),
+                    blurRadius: 2,
+                    offset: const Offset(0, 1),
                   ),
                 ],
               ),
@@ -568,7 +651,29 @@ class _YearPhotoStackState extends State<_YearPhotoStack> {
                         borderRadius: BorderRadius.circular(2),
                         child: AspectRatio(
                           aspectRatio: 1,
-                          child: _PhotoWidget(photo: photo),
+                          child: Stack(
+                            fit: StackFit.expand,
+                            children: [
+                              _PhotoWidget(photo: photo),
+                              // 暗角叠加 — 模拟冲印质感
+                              Positioned.fill(
+                                child: IgnorePointer(
+                                  child: Container(
+                                    decoration: BoxDecoration(
+                                      gradient: RadialGradient(
+                                        center: const Alignment(0, 0),
+                                        radius: 0.75,
+                                        colors: [
+                                          Colors.transparent,
+                                          Colors.black.withValues(alpha: 0.12),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
                       ),
                     ),
