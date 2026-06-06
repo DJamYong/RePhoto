@@ -4,132 +4,190 @@ part of '../home_page.dart';
 //  拍立得照片卡片
 // ═══════════════════════════════════════
 
-class _PolaroidCard extends ConsumerWidget {
+class _PolaroidCard extends ConsumerStatefulWidget {
   final AssetEntity photo;
-  const _PolaroidCard({required this.photo});
+  final VoidCallback? onTap;
+  const _PolaroidCard({required this.photo, this.onTap});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<_PolaroidCard> createState() => _PolaroidCardState();
+}
+
+class _PolaroidCardState extends ConsumerState<_PolaroidCard> {
+  bool _isPressed = false;
+  double _rotation = 0.0;
+
+  // ── 手势回调 ──
+
+  void _onTapDown(TapDownDetails d) => setState(() => _isPressed = true);
+
+  void _onTapUp(TapUpDetails d) {
+    setState(() => _isPressed = false);
+    widget.onTap?.call();
+  }
+
+  void _onTapCancel() => setState(() => _isPressed = false);
+
+  void _onLongPressStart(LongPressStartDetails d) {
+    final rng = Random();
+    setState(() => _rotation = (rng.nextDouble() - 0.5) * (pi / 90)); // ±1°
+  }
+
+  void _onLongPressEnd(LongPressEndDetails d) {
+    setState(() => _rotation = 0.0);
+  }
+
+  // ── 构建 ──
+
+  @override
+  Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final prefs = ref.watch(photoDisplayPrefsProvider);
     final colorScheme = Theme.of(context).colorScheme;
 
     // 判断是否往年的同月同日（"此刻·彼时"）
     final now = DateTime.now();
-    final taken = photo.createDateTime;
-    final isHistoricalMoment = taken.month == now.month && taken.day == now.day && taken.year != now.year;
+    final taken = widget.photo.createDateTime;
+    final isHistoricalMoment =
+        taken.month == now.month && taken.day == now.day && taken.year != now.year;
 
     // 没有任何信息要显示时，省略底部区域
     final showBottom = prefs.showDate || prefs.showAge;
 
-    return Container(
-      decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF3D322C) : Colors.white,
-        borderRadius: BorderRadius.circular(4),
-        boxShadow: [
-          BoxShadow(
-            color: isDark
-                ? Colors.black.withValues(alpha: 0.3)
-                : const Color(0xFF5C4033).withValues(alpha: 0.15),
-            blurRadius: 20,
-            offset: const Offset(0, 8),
-          ),
-          BoxShadow(
-            color: isDark
-                ? Colors.black.withValues(alpha: 0.2)
-                : const Color(0xFF5C4033).withValues(alpha: 0.08),
-            blurRadius: 6,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Padding(
-            padding: const EdgeInsets.all(12),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(2),
-              child: Stack(
-                children: [
-                  AspectRatio(
-                    aspectRatio: 1,
-                    child: _PhotoWidget(photo: photo),
-                  ),
-                  if (isHistoricalMoment)
-                    Positioned(
-                      top: 8,
-                      left: 8,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: colorScheme.primary.withValues(alpha: 0.85),
-                          borderRadius: BorderRadius.circular(12),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withValues(alpha: 0.15),
-                              blurRadius: 4,
-                              offset: const Offset(0, 2),
-                            ),
-                          ],
+    return AnimatedScale(
+      scale: _isPressed ? 0.98 : 1.0,
+      duration: const Duration(milliseconds: 150),
+      curve: Curves.easeOutCubic,
+      child: AnimatedRotation(
+        turns: _rotation / (2 * pi),
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeOutCubic,
+        child: GestureDetector(
+          onTapDown: _onTapDown,
+          onTapUp: _onTapUp,
+          onTapCancel: _onTapCancel,
+          onLongPressStart: _onLongPressStart,
+          onLongPressEnd: _onLongPressEnd,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 150),
+            curve: Curves.easeOutCubic,
+            decoration: BoxDecoration(
+              color: isDark ? const Color(0xFF3D322C) : Colors.white,
+              borderRadius: BorderRadius.circular(4),
+              boxShadow: [
+                BoxShadow(
+                  color: isDark
+                      ? Colors.black.withValues(alpha: 0.3)
+                      : const Color(0xFF5C4033).withValues(alpha: 0.15),
+                  blurRadius: 20,
+                  offset: const Offset(0, 8),
+                ),
+                BoxShadow(
+                  color: isDark
+                      ? Colors.black.withValues(alpha: 0.2)
+                      : const Color(0xFF5C4033).withValues(alpha: 0.08),
+                  blurRadius: 6,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(2),
+                    child: Stack(
+                      children: [
+                        AspectRatio(
+                          aspectRatio: 1,
+                          child: _PhotoWidget(photo: widget.photo),
                         ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(Icons.auto_awesome, size: 12, color: colorScheme.onPrimary),
-                            const SizedBox(width: 4),
-                            Text(
-                              '此刻·彼时',
-                              style: TextStyle(
-                                fontSize: 11,
-                                fontWeight: FontWeight.w600,
-                                color: colorScheme.onPrimary,
-                                letterSpacing: 1,
+                        if (isHistoricalMoment)
+                          Positioned(
+                            top: 8,
+                            left: 8,
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 8, vertical: 4),
+                              decoration: BoxDecoration(
+                                color: colorScheme.primary
+                                    .withValues(alpha: 0.85),
+                                borderRadius: BorderRadius.circular(12),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.black
+                                        .withValues(alpha: 0.15),
+                                    blurRadius: 4,
+                                    offset: const Offset(0, 2),
+                                  ),
+                                ],
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(Icons.auto_awesome,
+                                      size: 12,
+                                      color: colorScheme.onPrimary),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    '此刻·彼时',
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w600,
+                                      color: colorScheme.onPrimary,
+                                      letterSpacing: 1,
+                                    ),
+                                  ),
+                                ],
                               ),
                             ),
-                          ],
-                        ),
-                      ),
+                          ),
+                      ],
                     ),
-                ],
-              ),
+                  ),
+                ),
+                if (showBottom)
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.fromLTRB(20, 4, 20, 20),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (prefs.showDate)
+                          Text(
+                            _formatDate(taken),
+                            style: TextStyle(
+                              fontSize: 16,
+                              color: colorScheme.onSurfaceVariant
+                                  .withValues(alpha: 0.7),
+                              letterSpacing: 2,
+                              fontStyle: FontStyle.italic,
+                            ),
+                            textAlign: TextAlign.center,
+                          ),
+                        if (prefs.showAge)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 4),
+                            child: Text(
+                              _formatPhotoAge(taken),
+                              style: TextStyle(
+                                fontSize: 15,
+                                color: colorScheme.onSurfaceVariant
+                                    .withValues(alpha: 0.5),
+                                letterSpacing: 1,
+                              ),
+                              textAlign: TextAlign.center,
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+              ],
             ),
           ),
-          if (showBottom)
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.fromLTRB(20, 4, 20, 20),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  if (prefs.showDate)
-                    Text(
-                      _formatDate(photo.createDateTime),
-                      style: TextStyle(
-                        fontSize: 16,
-                        color: colorScheme.onSurfaceVariant.withValues(alpha: 0.7),
-                        letterSpacing: 2,
-                        fontStyle: FontStyle.italic,
-                      ),
-                      textAlign: TextAlign.center,
-                    ),
-                  if (prefs.showAge)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 4),
-                      child: Text(
-                        _formatPhotoAge(photo.createDateTime),
-                        style: TextStyle(
-                          fontSize: 15,
-                          color: colorScheme.onSurfaceVariant.withValues(alpha: 0.5),
-                          letterSpacing: 1,
-                        ),
-                        textAlign: TextAlign.center,
-                      ),
-                    ),
-                ],
-              ),
-            ),
-        ],
+        ),
       ),
     );
   }

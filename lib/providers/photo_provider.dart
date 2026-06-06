@@ -226,6 +226,29 @@ class PhotoProvider extends AsyncNotifier<RandomPhotoState> {
     state = AsyncData(state2.copyWith(preloadedThumbnail: thumb, preloadedFile: file, preloadedExif: exif));
   }
 
+  /// 强制加载一张"此刻·彼时"照片（测试用）—— 今天月日但不同年份
+  Future<void> loadHistoricalMomentPhoto() async {
+    final granted = await _photoService.requestPermission();
+    if (!granted) return;
+
+    ++_generation;
+    final photo = await _photoService.findHistoricalMomentPhoto();
+    if (photo == null) {
+      state = AsyncData(RandomPhotoState(
+        hasPermission: true,
+        errorMessage: '没有找到同年同月同日的照片',
+      ));
+      return;
+    }
+
+    state = AsyncData(RandomPhotoState(
+      photo: photo,
+      hasPermission: true,
+    ));
+
+    _preloadCurrentPhoto(photo);
+  }
+
   /// 按照片ID加载指定照片（历史抽取用）
   /// [isCollision] 为 true 时从内存缓存取碰撞数据，不查库
   Future<void> loadByPhotoId(String photoId, {bool isCollision = false}) async {

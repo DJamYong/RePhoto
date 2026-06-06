@@ -223,6 +223,26 @@ class PhotoService {
     return TimeCollision(groups: pick.value, selectedYear: newestYear);
   }
 
+  /// 查找一张能触发"此刻·彼时"的照片（今天月日但不同年份）（测试用）
+  Future<AssetEntity?> findHistoricalMomentPhoto() async {
+    if (_cachedPhotos == null) {
+      final allAlbum = await _getAllAlbum();
+      if (allAlbum == null) return null;
+      _cachedCount = await allAlbum.assetCountAsync;
+      if (_cachedCount == 0) return null;
+      _cachedPhotos = await allAlbum.getAssetListRange(start: 0, end: _cachedCount!);
+    }
+
+    final now = DateTime.now();
+    final candidates = _cachedPhotos!.where((p) {
+      final t = p.createDateTime;
+      return t.month == now.month && t.day == now.day && t.year != now.year;
+    }).toList();
+
+    if (candidates.isEmpty) return null;
+    return candidates[Random().nextInt(candidates.length)];
+  }
+
   /// 删除指定照片（从设备相册中彻底移除）
   Future<bool> deletePhoto(AssetEntity photo) async {
     try {

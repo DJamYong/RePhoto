@@ -55,7 +55,8 @@ class _PhotoAlbumViewState extends State<_PhotoAlbumView> {
                           onSelectYear: (y) => ref.read(photoProvider.notifier).selectCollisionYear(y),
                           onPhotoChanged: (i) => ref.read(photoProvider.notifier).selectCollisionPhoto(i),
                         )
-                      : GestureDetector(
+                      : _PolaroidCard(
+                          photo: photo,
                           onTap: () => Navigator.of(context).push(
                             PageRouteBuilder(
                               pageBuilder: (_, __, ___) => PhotoFullscreenPage(photo: photo),
@@ -64,7 +65,6 @@ class _PhotoAlbumViewState extends State<_PhotoAlbumView> {
                               reverseTransitionDuration: Duration.zero,
                             ),
                           ),
-                          child: _PolaroidCard(photo: photo),
                         ),
                 ),
               ),
@@ -143,32 +143,41 @@ class _PhotoAlbumViewState extends State<_PhotoAlbumView> {
                 },
               ),
             ),
-            // 换一张 + 历史抽取
+            // 换一张（居中）+ 历史抽取（右侧）
             Padding(
               padding: const EdgeInsets.fromLTRB(24, 4, 24, 16),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  SizedBox(width: 180, height: 48,
-                    child: FilledButton.icon(
-                      onPressed: () => ref.read(photoProvider.notifier).refresh(),
-                      icon: const Icon(Icons.shuffle, size: 20),
-                      label: const Text('换 一 张'),
-                      style: FilledButton.styleFrom(backgroundColor: cs.primary, foregroundColor: cs.onPrimary,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
-                        textStyle: const TextStyle(fontSize: 15, letterSpacing: 3)),
+              child: SizedBox(
+                height: 48,
+                child: Stack(
+                  children: [
+                    // 换一张按钮 — 屏幕居中
+                    Center(
+                      child: SizedBox(width: 180,
+                        child: FilledButton.icon(
+                          onPressed: () => ref.read(photoProvider.notifier).refresh(),
+                          icon: const Icon(Icons.shuffle, size: 20),
+                          label: const Text('换 一 张'),
+                          style: FilledButton.styleFrom(backgroundColor: cs.primary, foregroundColor: cs.onPrimary,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
+                            textStyle: const TextStyle(fontSize: 15, letterSpacing: 3)),
+                        ),
+                      ),
                     ),
-                  ),
-                  const SizedBox(width: 12),
-                  SizedBox(width: 44, height: 44,
-                    child: IconButton(
-                      onPressed: () => _showHistoryDialog(context),
-                      icon: const Icon(Icons.history, size: 22),
-                      tooltip: '历史抽取',
-                      style: IconButton.styleFrom(foregroundColor: cs.primary, backgroundColor: cs.primary.withValues(alpha: 0.1), shape: const CircleBorder()),
+                    // 历史抽取 — 贴右侧
+                    Positioned(
+                      right: 0,
+                      top: 2,
+                      child: SizedBox(width: 44, height: 44,
+                        child: IconButton(
+                          onPressed: () => _showHistoryDialog(context),
+                          icon: const Icon(Icons.history, size: 22),
+                          tooltip: '历史抽取',
+                          style: IconButton.styleFrom(foregroundColor: cs.primary, backgroundColor: cs.primary.withValues(alpha: 0.1), shape: const CircleBorder()),
+                        ),
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
           ],

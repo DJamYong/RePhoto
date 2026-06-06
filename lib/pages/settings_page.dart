@@ -299,6 +299,26 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                 width: double.infinity,
                 height: 48,
                 child: OutlinedButton.icon(
+                  onPressed: () {
+                    Navigator.of(context).pop();
+                    ref.read(photoProvider.notifier).loadHistoricalMomentPhoto();
+                  },
+                  icon: const Icon(Icons.auto_awesome),
+                  label: const Text('测试此刻·彼时'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: colorScheme.primary,
+                    side: BorderSide(color: colorScheme.primary.withValues(alpha: 0.4)),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
+                  ),
+                ),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 4),
+              child: SizedBox(
+                width: double.infinity,
+                height: 48,
+                child: OutlinedButton.icon(
                   onPressed: () => _showCollisionDiagnostic(context),
                   icon: const Icon(Icons.search),
                   label: const Text('诊断对撞数据'),
