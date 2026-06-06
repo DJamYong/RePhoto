@@ -376,17 +376,20 @@ class _PhotoWidgetState extends State<_PhotoWidget> {
       );
     }
 
-    return Image.memory(
-      _imageBytes!,
-      fit: BoxFit.cover,
-      frameBuilder: (context, child, frame, wasSynchronouslyLoaded) {
-        if (wasSynchronouslyLoaded) return child;
-        return AnimatedOpacity(
-          opacity: frame == null ? 0 : 1,
-          duration: const Duration(milliseconds: 400),
-          child: child,
-        );
-      },
+    return Hero(
+      tag: 'photo_${widget.photo.id}',
+      child: Image.memory(
+        _imageBytes!,
+        fit: BoxFit.cover,
+        frameBuilder: (context, child, frame, wasSynchronouslyLoaded) {
+          if (wasSynchronouslyLoaded) return child;
+          return AnimatedOpacity(
+            opacity: frame == null ? 0 : 1,
+            duration: const Duration(milliseconds: 400),
+            child: child,
+          );
+        },
+      ),
     );
   }
 }
@@ -640,9 +643,10 @@ class _YearPhotoStackState extends State<_YearPhotoStack> {
                     onTap: () => Navigator.of(context).push(
                       PageRouteBuilder(
                         pageBuilder: (_, a, b) => PhotoFullscreenPage(photo: photo),
-                        transitionsBuilder: (_, a, b, child) => child,
-                        transitionDuration: Duration.zero,
-                        reverseTransitionDuration: Duration.zero,
+                        transitionsBuilder: (_, animation, __, child) =>
+                            FadeTransition(opacity: animation, child: child),
+                        transitionDuration: const Duration(milliseconds: 200),
+                        reverseTransitionDuration: const Duration(milliseconds: 200),
                       ),
                     ),
                     child: Padding(

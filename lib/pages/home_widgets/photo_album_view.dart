@@ -60,9 +60,10 @@ class _PhotoAlbumViewState extends State<_PhotoAlbumView> {
                           onTap: () => Navigator.of(context).push(
                             PageRouteBuilder(
                               pageBuilder: (_, __, ___) => PhotoFullscreenPage(photo: photo),
-                              transitionsBuilder: (_, __, ___, child) => child,
-                              transitionDuration: Duration.zero,
-                              reverseTransitionDuration: Duration.zero,
+                              transitionsBuilder: (_, animation, __, child) =>
+                                  FadeTransition(opacity: animation, child: child),
+                              transitionDuration: const Duration(milliseconds: 200),
+                              reverseTransitionDuration: const Duration(milliseconds: 200),
                             ),
                           ),
                         ),

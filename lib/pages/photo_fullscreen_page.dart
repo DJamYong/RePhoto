@@ -169,6 +169,7 @@ class _PhotoFullscreenPageState extends State<PhotoFullscreenPage>
     });
   }
 
+
   // ── 双击 ──
 
   void _onDoubleTap() {
@@ -235,9 +236,12 @@ class _PhotoFullscreenPageState extends State<PhotoFullscreenPage>
                 child: Transform(
                   transform: transform,
                   alignment: Alignment.center,
-                  child: Image.memory(
-                    _imageBytes!,
-                    fit: BoxFit.contain,
+                  child: Hero(
+                    tag: 'photo_${widget.photo.id}',
+                    child: Image.memory(
+                      _imageBytes!,
+                      fit: BoxFit.contain,
+                    ),
                   ),
                 ),
               ),

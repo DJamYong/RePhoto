@@ -52,9 +52,10 @@ class ReviewPhotoThumb extends StatelessWidget {
           onTap: () => Navigator.of(context).push(
             PageRouteBuilder(
               pageBuilder: (_, __, ___) => PhotoFullscreenPage(photo: entity),
-              transitionsBuilder: (_, __, ___, child) => child,
-              transitionDuration: Duration.zero,
-              reverseTransitionDuration: Duration.zero,
+              transitionsBuilder: (_, animation, __, child) =>
+                  FadeTransition(opacity: animation, child: child),
+              transitionDuration: const Duration(milliseconds: 200),
+              reverseTransitionDuration: const Duration(milliseconds: 200),
             ),
           ),
           child: FutureBuilder<Uint8List?>(
