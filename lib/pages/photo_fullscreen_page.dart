@@ -32,6 +32,11 @@ class _PhotoFullscreenPageState extends State<PhotoFullscreenPage>
   Animation<double>? _animTx;
   Animation<double>? _animTy;
 
+  // ── 上划退出 ──
+  bool _gestureStartInDefault = false;
+  bool _isDismissing = false;
+  double _dismissDy = 0.0;
+
   // ── UI ──
   bool _showUI = true;
 
@@ -78,10 +83,19 @@ class _PhotoFullscreenPageState extends State<PhotoFullscreenPage>
       if (_animRot != null) _rotation = _animRot!.value;
       if (_animTx != null) _translation = Offset(_animTx!.value, _translation.dy);
       if (_animTy != null) _translation = Offset(_translation.dx, _animTy!.value);
+      if (_animDismissDy != null) _dismissDy = _animDismissDy!.value;
     });
   }
+  Animation<double>? _animDismissDy;
 
   // ── 手势 ──
+
+  // 判断是否处于默认状态（未缩放/未旋转/未平移）
+  bool get _isInDefaultState =>
+      (_scale - 1.0).abs() < 0.05 &&
+      _rotation.abs() < 0.01 &&
+      _translation.dx.abs() < 2.0 &&
+      _translation.dy.abs() < 2.0;
 
   void _onScaleStart(ScaleStartDetails d) {
     _baseScale = _scale;
@@ -91,10 +105,32 @@ class _PhotoFullscreenPageState extends State<PhotoFullscreenPage>
     _animRot = null;
     _animTx = null;
     _animTy = null;
+    _animDismissDy = null;
     _animCtrl.stop();
+
+    // 记录手势开始时是否处于默认状态（用于上划退出判断）
+    _gestureStartInDefault = _isInDefaultState;
+    _isDismissing = false;
+    _dismissDy = 0.0;
   }
 
   void _onScaleUpdate(ScaleUpdateDetails d) {
+    // 单指 + 默认状态 + 纵向滑动 → 进入上划退出模式
+    if (!_isDismissing &&
+        _gestureStartInDefault &&
+        d.pointerCount == 1 &&
+        d.focalPointDelta.dy.abs() > d.focalPointDelta.dx.abs() * 1.2) {
+      _isDismissing = true;
+    }
+
+    if (_isDismissing) {
+      setState(() {
+        _dismissDy += d.focalPointDelta.dy;
+      });
+      return;
+    }
+
+    // 正常缩放/旋转/平移
     setState(() {
       _scale = (_baseScale * d.scale).clamp(0.3, 6.0);
       _rotation = _baseRotation + d.rotation;
@@ -103,16 +139,43 @@ class _PhotoFullscreenPageState extends State<PhotoFullscreenPage>
   }
 
   void _onScaleEnd(ScaleEndDetails d) {
+    if (_isDismissing) {
+      // 上划距离 > 100px 或 上划速度 > 500 px/s → 退出
+      final shouldDismiss =
+          _dismissDy < -100 || d.velocity.pixelsPerSecond.dy < -500;
+      if (shouldDismiss) {
+        Navigator.of(context).pop();
+      } else {
+        // 未达到阈值 → 动画回弹
+        _animateDismissBack();
+      }
+      return;
+    }
+
     if (_scale < 0.25) _animateReset();
+  }
+
+  void _animateDismissBack() {
+    _animDismissDy = Tween<double>(begin: _dismissDy, end: 0)
+        .animate(CurvedAnimation(parent: _animCtrl, curve: Curves.easeOut));
+    _animCtrl.forward(from: 0).then((_) {
+      if (mounted) {
+        setState(() {
+          _isDismissing = false;
+          _dismissDy = 0.0;
+          _animDismissDy = null;
+        });
+      }
+    });
   }
 
   // ── 双击 ──
 
   void _onDoubleTap() {
-    if (_scale < 0.95 || _scale > 1.2) {
-      _animateReset();
-    } else {
+    if (_isInDefaultState) {
       _animateTo(scale: 2.8, rotation: 0, translation: Offset.zero);
+    } else {
+      _animateReset();
     }
   }
 
@@ -143,8 +206,19 @@ class _PhotoFullscreenPageState extends State<PhotoFullscreenPage>
 
   @override
   Widget build(BuildContext context) {
+    final screenHeight = MediaQuery.of(context).size.height;
+
+    // 上划退出进度 0→1：影响透明度
+    final dismissProgress =
+        (_isDismissing ? (_dismissDy.abs() / screenHeight).clamp(0.0, 1.0) : 0.0);
+    final photoOpacity = (1.0 - dismissProgress * 1.2).clamp(0.0, 1.0);
+    final uiOpacity = _showUI && !_isDismissing ? 1.0 : 0.0;
+
     final transform = Matrix4.identity()
-      ..translateByDouble(_translation.dx, _translation.dy, 0, 1)
+      ..translateByDouble(
+          _translation.dx,
+          _translation.dy + (_isDismissing ? _dismissDy : 0),
+          0, 1)
       ..rotateZ(_rotation)
       ..scaleByDouble(_scale, _scale, 1, 1);
 
@@ -153,15 +227,18 @@ class _PhotoFullscreenPageState extends State<PhotoFullscreenPage>
       body: Stack(
         fit: StackFit.expand,
         children: [
-          // 照片（全屏显示）
+          // 照片（全屏显示，上划退出时跟随移动 + 淡出）
           if (_imageBytes != null)
             Center(
-              child: Transform(
-                transform: transform,
-                alignment: Alignment.center,
-                child: Image.memory(
-                  _imageBytes!,
-                  fit: BoxFit.contain,
+              child: Opacity(
+                opacity: photoOpacity,
+                child: Transform(
+                  transform: transform,
+                  alignment: Alignment.center,
+                  child: Image.memory(
+                    _imageBytes!,
+                    fit: BoxFit.contain,
+                  ),
                 ),
               ),
             ),
@@ -195,10 +272,13 @@ class _PhotoFullscreenPageState extends State<PhotoFullscreenPage>
                       color: Colors.white54, size: 48),
             ),
 
-          if (_showUI)
-            Positioned(
-              top: MediaQuery.of(context).padding.top + 8,
-              left: 0, right: 0,
+          // 顶部按钮 + 日期
+          Positioned(
+            top: MediaQuery.of(context).padding.top + 8,
+            left: 0, right: 0,
+            child: AnimatedOpacity(
+              opacity: uiOpacity,
+              duration: const Duration(milliseconds: 150),
               child: Row(
                 children: [
                   IconButton(
@@ -216,19 +296,24 @@ class _PhotoFullscreenPageState extends State<PhotoFullscreenPage>
                 ],
               ),
             ),
+          ),
 
-          if (_showUI)
-            Positioned(
-              bottom: MediaQuery.of(context).padding.bottom + 24,
-              left: 0, right: 0,
+          // 底部提示
+          Positioned(
+            bottom: MediaQuery.of(context).padding.bottom + 24,
+            left: 0, right: 0,
+            child: AnimatedOpacity(
+              opacity: uiOpacity,
+              duration: const Duration(milliseconds: 150),
               child: const Center(
                 child: Text(
-                  '拖动移动 · 双指缩放/旋转',
+                  '上划退出 · 双指缩放/旋转',
                   style: TextStyle(
                       color: Colors.white38, fontSize: 12, letterSpacing: 1),
                 ),
               ),
             ),
+          ),
         ],
       ),
     );
