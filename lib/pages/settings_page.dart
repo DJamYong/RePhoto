@@ -133,9 +133,9 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                   SegmentedButton<double>(
                     showSelectedIcon: false,
                     segments: const [
-                      ButtonSegment(value: 0.1, label: Text('低', style: TextStyle(fontSize: 13))),
-                      ButtonSegment(value: 0.3, label: Text('中', style: TextStyle(fontSize: 13))),
-                      ButtonSegment(value: 0.5, label: Text('高', style: TextStyle(fontSize: 13))),
+                  ButtonSegment(value: 0.03, label: Text('低', style: TextStyle(fontSize: 13))),
+                      ButtonSegment(value: 0.08, label: Text('中', style: TextStyle(fontSize: 13))),
+                      ButtonSegment(value: 0.20, label: Text('高', style: TextStyle(fontSize: 13))),
                       ButtonSegment(value: 1.0, label: Text('全', style: TextStyle(fontSize: 13))),
                     ],
                     selected: {ref.watch(collisionPrefsProvider).probability},

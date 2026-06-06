@@ -61,7 +61,7 @@ class CollisionPrefs {
 
   const CollisionPrefs({
     this.enabled = false,
-    this.probability = 0.1,
+    this.probability = 0.03,
   });
 
   CollisionPrefs copyWith({
@@ -84,7 +84,7 @@ class CollisionPrefsNotifier extends Notifier<CollisionPrefs> {
     final prefs = ref.watch(sharedPrefsProvider);
     return CollisionPrefs(
       enabled: prefs.getBool(_keyEnabled) ?? false,
-      probability: prefs.getDouble(_keyProbability) ?? 0.1,
+      probability: prefs.getDouble(_keyProbability) ?? 0.03,
     );
   }
 

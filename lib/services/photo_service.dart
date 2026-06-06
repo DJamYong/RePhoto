@@ -133,6 +133,21 @@ class PhotoService {
     return allPhotos.last;
   }
 
+  /// 按ID从缓存中查找照片
+  Future<AssetEntity?> getPhotoById(String id) async {
+    if (_cachedPhotos == null) {
+      final allAlbum = await _getAllAlbum();
+      if (allAlbum == null) return null;
+      _cachedCount = await allAlbum.assetCountAsync;
+      if (_cachedCount == 0) return null;
+      _cachedPhotos = await allAlbum.getAssetListRange(start: 0, end: _cachedCount!);
+    }
+    for (final photo in _cachedPhotos!) {
+      if (photo.id == id) return photo;
+    }
+    return null;
+  }
+
   /// 查找与指定照片同月同日的其他年份照片，按年份分组
   Future<Map<int, List<AssetEntity>>> findSameDayPhotos(AssetEntity currentPhoto) async {
     final dt = currentPhoto.createDateTime;

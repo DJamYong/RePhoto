@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -10,6 +11,7 @@ import '../services/view_history_service.dart';
 import '../models/view_history.dart';
 import '../models/time_collision.dart';
 import 'preferences_provider.dart';
+import 'theme_provider.dart';
 
 /// 随机照片页面状态
 class RandomPhotoState {
@@ -69,9 +71,53 @@ class RandomPhotoState {
 class PhotoProvider extends AsyncNotifier<RandomPhotoState> {
   final _photoService = PhotoService();
   int _generation = 0;
+  /// 会话级碰撞缓存 — photoId → TimeCollision，不查库
+  final _collisionCache = <String, TimeCollision>{};
+  /// 最近浏览队列（最多 10 张不重复照片，索引 0 = 最新）
+  static const _recentQueueKey = 'recent_queue';
+  final _recentQueue = <RecentEntry>[];
+
+  /// 获取最近浏览历史（供弹窗使用）
+  List<RecentEntry> getRecentHistory() => List.unmodifiable(_recentQueue);
+
+  /// 从 SharedPreferences 恢复队列
+  void _restoreRecentQueue() {
+    final prefs = ref.read(sharedPrefsProvider);
+    final raw = prefs.getString(_recentQueueKey);
+    if (raw == null || raw.isEmpty) return;
+    try {
+      final list = jsonDecode(raw) as List;
+      _recentQueue.clear();
+      for (final item in list) {
+        final map = item as Map<String, dynamic>;
+        _recentQueue.add(RecentEntry(
+          map['photo_id'] as String,
+          map['is_collision'] as bool,
+          DateTime.parse(map['viewed_at'] as String),
+        ));
+      }
+      // 后台预加载所有缩略图，弹窗打开时直接显示
+      for (final entry in _recentQueue) {
+        _cacheThumbnail(entry);
+      }
+    } catch (_) {}
+  }
+
+  /// 持久化队列到 SharedPreferences
+  void _persistRecentQueue() {
+    final prefs = ref.read(sharedPrefsProvider);
+    final list = _recentQueue.map((e) => {
+      'photo_id': e.photoId,
+      'is_collision': e.isCollision,
+      'viewed_at': e.viewedAt.toIso8601String(),
+    }).toList();
+    prefs.setString(_recentQueueKey, jsonEncode(list));
+  }
 
   @override
   Future<RandomPhotoState> build() async {
+    // 从持久化存储恢复最近浏览队列
+    _restoreRecentQueue();
     // 初始加载：请求权限并获取一张随机照片
     final initialState = await _loadRandomPhoto();
     // 首张照片也需要后台预加载详情，使用 Future 延迟到 state 被框架设置之后执行
@@ -103,14 +149,6 @@ class PhotoProvider extends AsyncNotifier<RandomPhotoState> {
       );
     }
 
-    // 记录浏览历史
-    try {
-      await ViewHistoryService.create(ViewHistory(
-        photoId: photo.id,
-        viewedAt: DateTime.now(),
-      ));
-    } catch (_) {}
-
     // 时间对撞检测 — 先确认有匹配照片，再按设定概率决定是否展示
     TimeCollision? collision;
     if (photo != null) {
@@ -127,6 +165,20 @@ class PhotoProvider extends AsyncNotifier<RandomPhotoState> {
         }
       }
     }
+
+    // 记录浏览历史（碰撞检测之后，明确知晓是否碰撞）
+    try {
+      await ViewHistoryService.create(ViewHistory(
+        photoId: photo.id,
+        viewedAt: DateTime.now(),
+        isCollision: collision != null,
+      ));
+    } catch (_) {}
+    // 碰撞数据缓存到内存，供历史抽取使用
+    if (collision != null) {
+      _collisionCache[collision.currentPhoto.id] = collision;
+    }
+    _addToRecentQueue(photo.id, collision != null);
 
     return RandomPhotoState(
       photo: photo,
@@ -172,6 +224,60 @@ class PhotoProvider extends AsyncNotifier<RandomPhotoState> {
     if (file != null) { try { exif = await readExifFromFile(file); } catch (_) {} }
     if (gen != _generation) return;
     state = AsyncData(state2.copyWith(preloadedThumbnail: thumb, preloadedFile: file, preloadedExif: exif));
+  }
+
+  /// 按照片ID加载指定照片（历史抽取用）
+  /// [isCollision] 为 true 时从内存缓存取碰撞数据，不查库
+  Future<void> loadByPhotoId(String photoId, {bool isCollision = false}) async {
+    var photo = await _photoService.getPhotoById(photoId);
+    if (photo == null) return;
+
+    // 从内存缓存取碰撞数据（_collisionCache，session 级）
+    TimeCollision? collision;
+    if (isCollision) {
+      collision = _collisionCache[photoId];
+      if (collision != null) photo = collision.currentPhoto;
+    }
+
+    // 记录浏览历史
+    try {
+      await ViewHistoryService.create(ViewHistory(
+        photoId: photo.id,
+        viewedAt: DateTime.now(),
+        isCollision: collision != null,
+      ));
+    } catch (_) {}
+
+    _addToRecentQueue(photo.id, collision != null);
+
+    state = AsyncData(RandomPhotoState(
+      photo: photo,
+      hasPermission: true,
+      collision: collision,
+      selectedYear: collision?.selectedYear ?? 0,
+    ));
+    _preloadCurrentPhoto(photo);
+  }
+
+  /// 更新最近浏览队列（判重 + 保持最多 10 条），后台加载缩略图到缓存
+  void _addToRecentQueue(String photoId, bool isCollision) {
+    _recentQueue.removeWhere((e) => e.photoId == photoId);
+    final entry = RecentEntry(photoId, isCollision, DateTime.now());
+    _recentQueue.insert(0, entry);
+    if (_recentQueue.length > 10) _recentQueue.removeLast();
+    // 持久化到磁盘，重启后保留
+    _persistRecentQueue();
+    // 异步加载缩略图到内存，供历史弹窗直接使用
+    _cacheThumbnail(entry);
+  }
+
+  Future<void> _cacheThumbnail(RecentEntry entry) async {
+    final entity = await _photoService.getPhotoById(entry.photoId);
+    if (entity == null) return;
+    final thumb = await entity.thumbnailDataWithSize(
+      const ThumbnailSize(120, 120), quality: 85,
+    );
+    entry.thumbnail = thumb;
   }
 
   /// 切换到对撞模式中的指定年份
@@ -330,3 +436,13 @@ class PhotoProvider extends AsyncNotifier<RandomPhotoState> {
 final photoProvider = AsyncNotifierProvider<PhotoProvider, RandomPhotoState>(
   PhotoProvider.new,
 );
+
+/// 最近浏览队列条目
+class RecentEntry {
+  final String photoId;
+  final bool isCollision;
+  final DateTime viewedAt;
+  Uint8List? thumbnail;
+
+  RecentEntry(this.photoId, this.isCollision, this.viewedAt);
+}

@@ -143,18 +143,32 @@ class _PhotoAlbumViewState extends State<_PhotoAlbumView> {
                 },
               ),
             ),
-            // 换一张
+            // 换一张 + 历史抽取
             Padding(
               padding: const EdgeInsets.fromLTRB(24, 4, 24, 16),
-              child: SizedBox(width: 200, height: 48,
-                child: FilledButton.icon(
-                  onPressed: () => ref.read(photoProvider.notifier).refresh(),
-                  icon: const Icon(Icons.shuffle, size: 20),
-                  label: const Text('换 一 张'),
-                  style: FilledButton.styleFrom(backgroundColor: cs.primary, foregroundColor: cs.onPrimary,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
-                    textStyle: const TextStyle(fontSize: 15, letterSpacing: 3)),
-                ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  SizedBox(width: 180, height: 48,
+                    child: FilledButton.icon(
+                      onPressed: () => ref.read(photoProvider.notifier).refresh(),
+                      icon: const Icon(Icons.shuffle, size: 20),
+                      label: const Text('换 一 张'),
+                      style: FilledButton.styleFrom(backgroundColor: cs.primary, foregroundColor: cs.onPrimary,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
+                        textStyle: const TextStyle(fontSize: 15, letterSpacing: 3)),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  SizedBox(width: 44, height: 44,
+                    child: IconButton(
+                      onPressed: () => _showHistoryDialog(context),
+                      icon: const Icon(Icons.history, size: 22),
+                      tooltip: '历史抽取',
+                      style: IconButton.styleFrom(foregroundColor: cs.primary, backgroundColor: cs.primary.withValues(alpha: 0.1), shape: const CircleBorder()),
+                    ),
+                  ),
+                ],
               ),
             ),
           ],
@@ -352,6 +366,36 @@ class _PhotoAlbumViewState extends State<_PhotoAlbumView> {
   }
 
   /// 弹出全部记录列表
+  /// 弹出近24小时浏览记录列表
+  void _showHistoryDialog(BuildContext context) async {
+    final entries = ref.read(photoProvider.notifier).getRecentHistory();
+    if (entries.isEmpty) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('暂无浏览记录'),
+          duration: Duration(seconds: 2),
+        ));
+      }
+      return;
+    }
+
+    if (!context.mounted) return;
+    final cs = Theme.of(context).colorScheme;
+
+    // 先弹窗，再异步加载缩略图
+    showDialog(
+      context: context,
+      builder: (ctx) => _HistoryDialogContent(
+        entries: entries,
+        colorScheme: cs,
+        onTap: (photoId, isCollision) {
+          Navigator.of(ctx).pop();
+          ref.read(photoProvider.notifier).loadByPhotoId(photoId, isCollision: isCollision);
+        },
+      ),
+    );
+  }
+
   void _showRecordsListDialog(BuildContext context, List<Record> records, ColorScheme cs) {
     showDialog(
       context: context,
@@ -392,6 +436,142 @@ class _PhotoAlbumViewState extends State<_PhotoAlbumView> {
           );
         },
       ),
+    );
+  }
+}
+
+/// 历史抽取列表项 — 异步加载缩略图
+class _HistoryTile extends StatefulWidget {
+  final RecentEntry entry;
+  final VoidCallback onTap;
+  final PhotoService? photoService;
+
+  const _HistoryTile({
+    required this.entry,
+    required this.onTap,
+    this.photoService,
+  });
+
+  @override
+  State<_HistoryTile> createState() => _HistoryTileState();
+}
+
+class _HistoryTileState extends State<_HistoryTile> {
+  Uint8List? _thumb;
+  bool _loading = true;
+
+  RecentEntry get _entry => widget.entry;
+
+  @override
+  void initState() {
+    super.initState();
+    if (_entry.thumbnail != null) {
+      _thumb = _entry.thumbnail;
+      _loading = false;
+    } else {
+      _loadThumb();
+    }
+  }
+
+  Future<void> _loadThumb() async {
+    final service = widget.photoService ?? PhotoService();
+    final entity = await service.getPhotoById(_entry.photoId);
+    if (entity != null && mounted) {
+      final thumb = await entity.thumbnailDataWithSize(
+        const ThumbnailSize(120, 120), quality: 85,
+      );
+      if (mounted) setState(() { _thumb = thumb; _loading = false; });
+    } else if (mounted) {
+      setState(() => _loading = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final timeStr = _formatTime(_entry.viewedAt);
+
+    return ListTile(
+      leading: ClipRRect(
+        borderRadius: BorderRadius.circular(8),
+        child: SizedBox(width: 48, height: 48,
+          child: _loading
+              ? Center(child: SizedBox(width: 20, height: 20,
+                  child: CircularProgressIndicator(strokeWidth: 2, color: cs.primary)))
+              : (_thumb != null
+                  ? Image.memory(_thumb!, fit: BoxFit.cover)
+                  : Icon(Icons.broken_image_outlined, color: cs.onSurfaceVariant)),
+        ),
+      ),
+      title: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (_entry.isCollision) ...[const SizedBox(width: 4), Icon(Icons.swap_horiz, size: 14, color: cs.primary)],
+          const SizedBox(width: 4),
+          Text(timeStr, style: TextStyle(fontSize: 14, color: cs.onSurface)),
+        ],
+      ),
+      trailing: Icon(Icons.chevron_right, size: 18, color: cs.onSurfaceVariant),
+      onTap: widget.onTap,
+    );
+  }
+
+  String _formatTime(DateTime dt) {
+    final now = DateTime.now();
+    final diff = now.difference(dt);
+    if (diff.inMinutes < 1) return '刚刚';
+    if (diff.inMinutes < 60) return '${diff.inMinutes} 分钟前';
+    if (diff.inHours < 24) return '${diff.inHours} 小时前';
+    return '${dt.month}/${dt.day} ${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
+  }
+}
+
+/// 历史抽取弹窗内容 — 先弹窗，后异步加载缩略图
+class _HistoryDialogContent extends StatefulWidget {
+  final List<RecentEntry> entries;
+  final ColorScheme colorScheme;
+  final void Function(String photoId, bool isCollision) onTap;
+
+  const _HistoryDialogContent({
+    required this.entries,
+    required this.colorScheme,
+    required this.onTap,
+  });
+
+  @override
+  State<_HistoryDialogContent> createState() => _HistoryDialogContentState();
+}
+
+class _HistoryDialogContentState extends State<_HistoryDialogContent> {
+  final _photoService = PhotoService();
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = widget.colorScheme;
+    return AlertDialog(
+      title: Row(children: [
+        Icon(Icons.history, size: 20, color: cs.primary),
+        const SizedBox(width: 8),
+        Text('历史抽取 (${widget.entries.length})', style: const TextStyle(fontSize: 17)),
+      ]),
+      content: SizedBox(
+        width: double.maxFinite,
+        child: ListView.builder(
+          shrinkWrap: true,
+          itemCount: min(widget.entries.length, 10),
+          itemBuilder: (context, index) {
+            final e = widget.entries[index];
+            return _HistoryTile(
+              entry: e,
+              photoService: _photoService,
+              onTap: () => widget.onTap(e.photoId, e.isCollision),
+            );
+          },
+        ),
+      ),
+      actions: [
+        TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('关闭')),
+      ],
     );
   }
 }

@@ -48,6 +48,22 @@ class ViewHistoryService {
     return Sqflite.firstIntValue(result) ?? 0;
   }
 
+  /// 获取最近 N 张**不重复**照片的浏览记录
+  /// SQL 层面直接 GROUP BY photoId，取每张照片的最新一次浏览
+  static Future<List<ViewHistory>> getRecent(int count) async {
+    final rows = await DatabaseService.db.rawQuery('''
+      SELECT v.* FROM view_history v
+      INNER JOIN (
+        SELECT photo_id, MAX(viewed_at) AS max_viewed
+        FROM view_history
+        GROUP BY photo_id
+      ) g ON v.photo_id = g.photo_id AND v.viewed_at = g.max_viewed
+      ORDER BY v.viewed_at DESC
+      LIMIT ?
+    ''', [count]);
+    return rows.map(ViewHistory.fromMap).toList();
+  }
+
   /// 获取近30天各照片被抽到的次数 Map<photoId, count>
   static Future<Map<String, int>> getRecentViewCounts() async {
     final cutoff = DateTime.now().subtract(const Duration(days: 30));

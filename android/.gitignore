@@ -12,3 +12,5 @@ GeneratedPluginRegistrant.java
 key.properties
 **/*.keystore
 **/*.jks
+# 团队共享的 dev keystore — 允许提交，确保多机同一签名
+!dev.keystore
