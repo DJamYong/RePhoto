@@ -10,7 +10,6 @@ import '../providers/theme_provider.dart';
 import '../providers/preferences_provider.dart';
 import '../services/view_history_service.dart';
 import '../services/record_service.dart';
-import '../services/motion_photo_service.dart';
 import '../services/photo_service.dart';
 import '../services/backup_service.dart';
 import '../providers/photo_provider.dart';
@@ -499,64 +498,9 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
 );
   }
 
-  /// 测试 Live Photo：诊断信息输出到 Run 控制台
+  /// 测试 Live Photo
   Future<void> _testLivePhoto(BuildContext context, WidgetRef ref) async {
-    Navigator.of(context).pop(); // 关闭设置页
-    debugPrint('╔══════════════════════════════════════╗');
-    debugPrint('║     Live Photo 诊断                  ║');
-    debugPrint('╚══════════════════════════════════════╝');
-
-    // 直接从相册取照片，不依赖 provider 状态
-    final albums = await PhotoManager.getAssetPathList(
-      type: RequestType.image, hasAll: true,
-    );
-    if (albums.isEmpty) {
-      debugPrint('错误: 相册为空');
-      return;
-    }
-    final all = albums.firstWhere((a) => a.isAll, orElse: () => albums.first);
-    final count = await all.assetCountAsync;
-    debugPrint('相册总数: $count');
-
-    // 取第1张做详细诊断
-    if (count > 0) {
-      final photos = await all.getAssetListRange(start: 0, end: 1);
-      if (photos.isNotEmpty) {
-        final p = photos.first;
-        debugPrint('--- 第1张照片基本信息 ---');
-        debugPrint('photoId: ${p.id}');
-        debugPrint('isLivePhoto: ${p.isLivePhoto}');
-        debugPrint('mimeType: ${p.mimeType}');
-        debugPrint('size: ${p.size}');
-
-        debugPrint('--- Android debugCheck ---');
-        final debug = await MotionPhotoService.debugCheck(p.id);
-        debugPrint(debug?.toString() ?? 'null (MethodChannel 未注册)');
-
-        debugPrint('--- Dart isMotionPhoto ---');
-        final isMotion = await MotionPhotoService.isMotionPhoto(
-          photoId: p.id,
-          isLivePhotoIOS: p.isLivePhoto,
-          mimeType: p.mimeType,
-        );
-        debugPrint('结果: $isMotion');
-      }
-    }
-
-    // 随机抽10张
-    debugPrint('--- 随机抽样10张 ---');
-    final sampleCount = count > 100 ? 100 : count;
-    final photos = await all.getAssetListRange(start: 0, end: sampleCount);
-    photos.shuffle();
-    var foundLive = 0;
-    for (final p in photos.take(10)) {
-      final hit = await MotionPhotoService.batchCheck(photoIds: [p.id]);
-      if (hit[p.id] == true) foundLive++;
-      debugPrint('  id=${p.id} size=${p.size} ${p.mimeType} → ${hit[p.id]}');
-    }
-    debugPrint('找到动图: $foundLive/10');
-
-    debugPrint('=== 完毕，尝试加载 Live Photo ===');
+    Navigator.of(context).pop();
     ref.read(photoProvider.notifier).loadLivePhoto();
   }
 

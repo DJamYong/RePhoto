@@ -7,11 +7,9 @@ import android.provider.MediaStore
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
-import android.util.Log
 import java.io.File
 
 class MainActivity : FlutterActivity() {
-    companion object { private const val TAG = "MotionPhoto" }
     private val CHANNEL = "com.rephoto.rephoto/motion_photo"
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
@@ -161,24 +159,18 @@ class MainActivity : FlutterActivity() {
 
     /** 提取动图视频：配对 MP4 → ftyp 搜索 → videoOffset 兜底 */
     private fun extractMotionVideo(id: String): String? {
-        // 1. 配对 MP4 Content URI
         val paired = findPairedVideoUri(id)
-        if (paired != null) { Log.d(TAG, "extractVideo($id) → paired=$paired"); return paired }
+        if (paired != null) return paired
 
         val uri = contentUriFor(id) ?: return null
         return try {
             val fileSize = getFileSize(uri)
-            Log.d(TAG, "extractVideo($id) → fileSize=$fileSize")
-            if (fileSize <= 0) { Log.d(TAG, "extractVideo($id) → fileSize <= 0"); return null }
+            if (fileSize <= 0) return null
 
-            // 2. ftyp 搜索（最可靠）
             val ftypResult = extractEmbeddedMp4(uri, fileSize)
-            Log.d(TAG, "extractVideo($id) → ftypResult=$ftypResult")
             if (ftypResult != null) return ftypResult
 
-            // 3. XMP videoOffset 兜底
             val videoOffset = getVideoOffsetFromXmp(uri)
-            Log.d(TAG, "extractVideo($id) → videoOffset=$videoOffset")
             if (videoOffset != null && videoOffset > 0 && videoOffset < fileSize) {
                 val startPos = fileSize - videoOffset
                 val tempFile = File(cacheDir, "motion_${id}.mp4")
@@ -186,12 +178,10 @@ class MainActivity : FlutterActivity() {
                     stream.skip(startPos)
                     stream.copyTo(tempFile.outputStream())
                 }
-                Log.d(TAG, "extractVideo($id) → tempFile.size=${tempFile.length()}")
                 if (tempFile.length() > 512) return tempFile.absolutePath
             }
-            Log.d(TAG, "extractVideo($id) → all methods failed")
             null
-        } catch (_: Exception) { Log.d(TAG, "extractVideo($id) → exception"); null }
+        } catch (_: Exception) { null }
     }
 
     /** 从 MediaStore XMP 列或文件头解析 videoOffset */
@@ -225,23 +215,14 @@ class MainActivity : FlutterActivity() {
         // 小米/Google Motion Photo: Item:Length where Item:Semantic="MotionPhoto"
         val itemLengthPattern = Regex("""Item:Length="(\d+)"""")
         val semPattern = Regex("""Item:Semantic="MotionPhoto"""")
-        // 找到 MotionPhoto 语义块后面的 Item:Length
         val semIndex = semPattern.find(xmp)?.range?.last ?: -1
         if (semIndex >= 0) {
             val lengthMatch = itemLengthPattern.find(xmp, semIndex)
-            if (lengthMatch != null) {
-                val value = lengthMatch.groupValues[1].toLongOrNull()
-                Log.d(TAG, "parseVideoOffset: Item:Length=$value (from MotionPhoto semantic)")
-                return value
-            }
+            if (lengthMatch != null) return lengthMatch.groupValues[1].toLongOrNull()
         }
-        // 兜底: 搜 *Offset 字段
         val offsetPattern = Regex("""(\w+)?[Oo]ffset[="\s]+(\d+)""")
         val match = offsetPattern.find(xmp)
-        if (match != null) {
-            return match.groupValues[2].toLongOrNull()
-        }
-        Log.d(TAG, "parseVideoOffset: nothing found")
+        if (match != null) return match.groupValues[2].toLongOrNull()
         return null
     }
 

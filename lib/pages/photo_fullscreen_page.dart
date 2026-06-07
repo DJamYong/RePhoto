@@ -256,24 +256,16 @@ class _PhotoFullscreenPageState extends State<PhotoFullscreenPage>
           }
         }
       } else {
-        debugPrint('[LIVE] extracting video for id=${widget.photo.id}');
-        final debugInfo = await MotionPhotoService.debugCheck(widget.photo.id);
-        debugPrint('[LIVE] debugInfo=$debugInfo');
         final videoUri = await MotionPhotoService.extractMotionVideo(widget.photo.id);
-        debugPrint('[LIVE] videoUri=$videoUri');
         if (videoUri != null) {
           if (videoUri.startsWith('content://')) {
             ctrl = VideoPlayerController.contentUri(Uri.parse(videoUri));
           } else {
-            debugPrint('[LIVE] temp file size=${File(videoUri).lengthSync()}');
             ctrl = VideoPlayerController.file(File(videoUri));
           }
         }
       }
-      if (ctrl == null || !mounted) {
-        debugPrint('[LIVE] ctrl is null — cannot play');
-        return;
-      }
+      if (ctrl == null || !mounted) return;
       _videoCtrl = ctrl;
       await ctrl.initialize();
 
