@@ -16,6 +16,31 @@ class _PolaroidCard extends ConsumerStatefulWidget {
 class _PolaroidCardState extends ConsumerState<_PolaroidCard> {
   bool _isPressed = false;
   double _rotation = 0.0;
+  bool _isMotionPhoto = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkMotionPhoto();
+  }
+
+  @override
+  void didUpdateWidget(covariant _PolaroidCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.photo.id != widget.photo.id) {
+      _isMotionPhoto = false;
+      _checkMotionPhoto();
+    }
+  }
+
+  Future<void> _checkMotionPhoto() async {
+    final isMotion = await MotionPhotoService.isMotionPhoto(
+      photoId: widget.photo.id,
+      isLivePhotoIOS: widget.photo.isLivePhoto,
+      mimeType: widget.photo.mimeType,
+    );
+    if (mounted && isMotion) setState(() => _isMotionPhoto = true);
+  }
 
   // ── 手势回调 ──
 
@@ -198,6 +223,62 @@ class _PolaroidCardState extends ConsumerState<_PolaroidCard> {
                               ),
                             ),
                           ),
+                          // Live Photo 标识
+                          if (_isMotionPhoto)
+                            Positioned(
+                              bottom: 6,
+                              left: 6,
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 4, vertical: 1),
+                                decoration: BoxDecoration(
+                                  color: Colors.black.withValues(alpha: 0.4),
+                                  borderRadius: BorderRadius.circular(3),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    SizedBox(
+                                      width: 10, height: 10,
+                                      child: Stack(
+                                        alignment: Alignment.center,
+                                        children: [
+                                          CustomPaint(
+                                            size: const Size(10, 10),
+                                            painter: LiveDashedCirclePainter(
+                                              color: Colors.white54,
+                                              strokeWidth: 0.8,
+                                              dashLength: 1.2,
+                                              gapLength: 0.8,
+                                            ),
+                                          ),
+                                          Container(
+                                            width: 5, height: 5,
+                                            decoration: BoxDecoration(
+                                              shape: BoxShape.circle,
+                                              border: Border.all(
+                                                  color: Colors.white54,
+                                                  width: 0.8),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    const SizedBox(width: 2),
+                                    Text(
+                                      'LIVE',
+                                      style: TextStyle(
+                                        fontSize: 7,
+                                        fontWeight: FontWeight.w500,
+                                        color: Colors.white
+                                            .withValues(alpha: 0.5),
+                                        letterSpacing: 0.5,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
                       ],
                     ),
                   ),
@@ -296,7 +377,8 @@ class _PolaroidCardState extends ConsumerState<_PolaroidCard> {
 
 class _PhotoWidget extends StatefulWidget {
   final AssetEntity photo;
-  const _PhotoWidget({required this.photo});
+  final String? heroSuffix;
+  const _PhotoWidget({required this.photo, this.heroSuffix});
 
   @override
   State<_PhotoWidget> createState() => _PhotoWidgetState();
@@ -376,8 +458,9 @@ class _PhotoWidgetState extends State<_PhotoWidget> {
       );
     }
 
+    final heroTag = 'photo_${widget.photo.id}${widget.heroSuffix ?? ''}';
     return Hero(
-      tag: 'photo_${widget.photo.id}',
+      tag: heroTag,
       child: Image.memory(
         _imageBytes!,
         fit: BoxFit.cover,
@@ -467,6 +550,7 @@ class _CollisionCard extends StatefulWidget {
   final int currentPhotoIndex;
   final void Function(int year) onSelectYear;
   final void Function(int index) onPhotoChanged;
+  final Set<String> motionPhotoIds;
 
   const _CollisionCard({
     super.key,
@@ -475,6 +559,7 @@ class _CollisionCard extends StatefulWidget {
     required this.currentPhotoIndex,
     required this.onSelectYear,
     required this.onPhotoChanged,
+    this.motionPhotoIds = const {},
   });
 
   @override
@@ -487,7 +572,8 @@ class _YearPhotoStack extends StatefulWidget {
   final List<AssetEntity> photos;
   final int initialPage;
   final void Function(int index)? onPageChanged;
-  const _YearPhotoStack({super.key, required this.year, required this.photos, this.initialPage = 0, this.onPageChanged});
+  final Set<String> motionPhotoIds;
+  const _YearPhotoStack({super.key, required this.year, required this.photos, this.initialPage = 0, this.onPageChanged, this.motionPhotoIds = const {}});
 
   @override
   State<_YearPhotoStack> createState() => _YearPhotoStackState();
@@ -658,7 +744,7 @@ class _YearPhotoStackState extends State<_YearPhotoStack> {
                           child: Stack(
                             fit: StackFit.expand,
                             children: [
-                              _PhotoWidget(photo: photo),
+                              _PhotoWidget(photo: photo, heroSuffix: '_year${widget.year}'),
                               // 暗角叠加 — 模拟冲印质感
                               Positioned.fill(
                                 child: IgnorePointer(
@@ -676,6 +762,62 @@ class _YearPhotoStackState extends State<_YearPhotoStack> {
                                   ),
                                 ),
                               ),
+                              // Live Photo 标识
+                              if (widget.motionPhotoIds.contains(photo.id))
+                                Positioned(
+                                  bottom: 4,
+                                  left: 4,
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 3, vertical: 1),
+                                    decoration: BoxDecoration(
+                                      color: Colors.black
+                                          .withValues(alpha: 0.35),
+                                      borderRadius: BorderRadius.circular(2),
+                                    ),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        SizedBox(
+                                          width: 8, height: 8,
+                                          child: Stack(
+                                            alignment: Alignment.center,
+                                            children: [
+                                              CustomPaint(
+                                                size: const Size(8, 8),
+                                                painter: LiveDashedCirclePainter(
+                                                  color: Colors.white38,
+                                                  strokeWidth: 0.7,
+                                                  dashLength: 1,
+                                                  gapLength: 0.7,
+                                                ),
+                                              ),
+                                              Container(
+                                                width: 4, height: 4,
+                                                decoration: BoxDecoration(
+                                                  shape: BoxShape.circle,
+                                                  border: Border.all(
+                                                      color: Colors.white38,
+                                                      width: 0.7),
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                        const SizedBox(width: 1),
+                                        Text(
+                                          'LIVE',
+                                          style: TextStyle(
+                                            fontSize: 6,
+                                            fontWeight: FontWeight.w500,
+                                            color: Colors.white.withValues(alpha: 0.45),
+                                            letterSpacing: 0.5,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
                             ],
                           ),
                         ),
@@ -708,6 +850,7 @@ class _CollisionCardState extends State<_CollisionCard> {
       photos: photos,
       initialPage: isCurrentYear ? widget.currentPhotoIndex : 0,
       onPageChanged: widget.onPhotoChanged,
+      motionPhotoIds: widget.motionPhotoIds,
     );
   }
 

@@ -1,6 +1,10 @@
+import 'dart:io';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:photo_manager/photo_manager.dart';
+import 'package:video_player/video_player.dart';
+import '../services/motion_photo_service.dart';
+import '../widgets/live_dashed_circle_painter.dart';
 
 /// 全屏照片查看页 — 双指缩放/旋转/平移 + 双击缩放
 class PhotoFullscreenPage extends StatefulWidget {
@@ -13,7 +17,7 @@ class PhotoFullscreenPage extends StatefulWidget {
 }
 
 class _PhotoFullscreenPageState extends State<PhotoFullscreenPage>
-    with SingleTickerProviderStateMixin {
+    with TickerProviderStateMixin {
   Uint8List? _imageBytes;
   bool _isLoading = true;
 
@@ -37,6 +41,16 @@ class _PhotoFullscreenPageState extends State<PhotoFullscreenPage>
   bool _isDismissing = false;
   double _dismissDy = 0.0;
 
+  // ── Live Photo ──
+  bool _isLivePhoto = false;
+  VideoPlayerController? _videoCtrl;
+  bool _isPlayingLive = false;
+
+  late final AnimationController _fadeCtrl = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 300),
+  )..addListener(() => setState(() {}));
+
   // ── UI ──
   bool _showUI = true;
 
@@ -49,12 +63,15 @@ class _PhotoFullscreenPageState extends State<PhotoFullscreenPage>
     );
     _animCtrl.addListener(_onAnimTick);
     _loadImage();
+    _initLivePhoto();
   }
 
   @override
   void dispose() {
     _animCtrl.removeListener(_onAnimTick);
     _animCtrl.dispose();
+    _fadeCtrl.dispose();
+    _videoCtrl?.dispose();
     super.dispose();
   }
 
@@ -98,6 +115,9 @@ class _PhotoFullscreenPageState extends State<PhotoFullscreenPage>
       _translation.dy.abs() < 2.0;
 
   void _onScaleStart(ScaleStartDetails d) {
+    // 播放中做任何手势都退出播放
+    if (_isPlayingLive) { _stopLivePlayback(); return; }
+
     _baseScale = _scale;
     _baseRotation = _rotation;
     // 清除动画引用，防止 onAnimTick 读到过期值
@@ -130,19 +150,22 @@ class _PhotoFullscreenPageState extends State<PhotoFullscreenPage>
       return;
     }
 
-    // 正常缩放/旋转/平移
+    // 正常缩放/旋转/平移（默认状态下禁止单指平移）
     setState(() {
       _scale = (_baseScale * d.scale).clamp(0.3, 6.0);
       _rotation = _baseRotation + d.rotation;
-      _translation += d.focalPointDelta;
+      // 默认状态下不响应单指拖动；缩放/旋转后才允许平移
+      if (!_gestureStartInDefault || d.scale != 1.0) {
+        _translation += d.focalPointDelta;
+      }
     });
   }
 
   void _onScaleEnd(ScaleEndDetails d) {
     if (_isDismissing) {
-      // 上划距离 > 100px 或 上划速度 > 500 px/s → 退出
+      // 上划/下滑距离 > 100px 或速度 > 500 px/s → 退出
       final shouldDismiss =
-          _dismissDy < -100 || d.velocity.pixelsPerSecond.dy < -500;
+          _dismissDy.abs() > 100 || d.velocity.pixelsPerSecond.dy.abs() > 500;
       if (shouldDismiss) {
         Navigator.of(context).pop();
       } else {
@@ -152,7 +175,7 @@ class _PhotoFullscreenPageState extends State<PhotoFullscreenPage>
       return;
     }
 
-    if (_scale < 0.25) _animateReset();
+    if (_scale < 0.3) _animateReset();
   }
 
   void _animateDismissBack() {
@@ -201,7 +224,102 @@ class _PhotoFullscreenPageState extends State<PhotoFullscreenPage>
     _animCtrl.forward(from: 0);
   }
 
-  void _onTap() => setState(() => _showUI = !_showUI);
+  void _onTap() {
+    if (_isPlayingLive) { _stopLivePlayback(); return; }
+    setState(() => _showUI = !_showUI);
+  }
+
+  // ── Live Photo ──
+
+  Future<void> _initLivePhoto() async {
+    final isMotion = await MotionPhotoService.isMotionPhoto(
+      photoId: widget.photo.id,
+      isLivePhotoIOS: widget.photo.isLivePhoto,
+      mimeType: widget.photo.mimeType,
+    );
+    if (!isMotion || !mounted) return;
+
+    _isLivePhoto = true;
+    setState(() {});
+
+    try {
+      VideoPlayerController? ctrl;
+      if (widget.photo.isLivePhoto) {
+        // iOS: getMediaUrl 返回 file:// 本地 MOV 路径
+        final url = await widget.photo.getMediaUrl();
+        if (url != null) {
+          final uri = Uri.parse(url);
+          if (uri.scheme == 'file') {
+            ctrl = VideoPlayerController.file(File.fromUri(uri));
+          } else {
+            ctrl = VideoPlayerController.networkUrl(uri);
+          }
+        }
+      } else {
+        debugPrint('[LIVE] extracting video for id=${widget.photo.id}');
+        final debugInfo = await MotionPhotoService.debugCheck(widget.photo.id);
+        debugPrint('[LIVE] debugInfo=$debugInfo');
+        final videoUri = await MotionPhotoService.extractMotionVideo(widget.photo.id);
+        debugPrint('[LIVE] videoUri=$videoUri');
+        if (videoUri != null) {
+          if (videoUri.startsWith('content://')) {
+            ctrl = VideoPlayerController.contentUri(Uri.parse(videoUri));
+          } else {
+            debugPrint('[LIVE] temp file size=${File(videoUri).lengthSync()}');
+            ctrl = VideoPlayerController.file(File(videoUri));
+          }
+        }
+      }
+      if (ctrl == null || !mounted) {
+        debugPrint('[LIVE] ctrl is null — cannot play');
+        return;
+      }
+      _videoCtrl = ctrl;
+      await ctrl.initialize();
+
+      // 视频播完：还在长按就停在最后一帧，松手才退出
+      final videoCtrl = ctrl;
+      videoCtrl.addListener(() {
+        if (videoCtrl.value.isCompleted && mounted) {
+          _onLiveVideoCompleted(videoCtrl);
+        }
+      });
+
+      if (mounted) setState(() {});
+    } catch (_) {
+      // 视频初始化失败，静默降级
+    }
+  }
+
+  /// 长按 → 播放动图（淡入）
+  void _onLongPress() {
+    if (!_isLivePhoto) return;
+    if (!_isInDefaultState) return;
+    final ctrl = _videoCtrl;
+    if (ctrl == null || !ctrl.value.isInitialized) return;
+    setState(() => _isPlayingLive = true);
+    _fadeCtrl.forward();
+    ctrl.play();
+  }
+
+  /// 松手 → 淡出回到静态图
+  Future<void> _stopLivePlayback() async {
+    if (!_isPlayingLive) return;
+    _isPlayingLive = false;
+    _fadeCtrl.reverse();
+    if (mounted) setState(() {});
+    final ctrl = _videoCtrl;
+    if (ctrl != null) {
+      ctrl.pause();
+      await ctrl.seekTo(Duration.zero);
+    }
+  }
+
+  void _onLiveVideoCompleted(VideoPlayerController ctrl) {
+    if (!_isPlayingLive) return;
+    ctrl.pause();
+    ctrl.seekTo(Duration.zero);
+  }
 
   // ── 构建 ──
 
@@ -247,6 +365,31 @@ class _PhotoFullscreenPageState extends State<PhotoFullscreenPage>
               ),
             ),
 
+          // 黑底 + 视频层（显式 AnimationController 驱动淡入淡出）
+          if (_videoCtrl != null && _videoCtrl!.value.isInitialized) ...[
+            Positioned.fill(
+              child: Opacity(
+                opacity: _fadeCtrl.value,
+                child: Container(color: Colors.black),
+              ),
+            ),
+            Center(
+              child: Opacity(
+                opacity: _fadeCtrl.value,
+                child: Transform(
+                  transform: transform,
+                  alignment: Alignment.center,
+                  child: AspectRatio(
+                    aspectRatio: _videoCtrl!.value.aspectRatio > 0
+                        ? _videoCtrl!.value.aspectRatio
+                        : 1.0,
+                    child: VideoPlayer(_videoCtrl!),
+                  ),
+                ),
+              ),
+            ),
+          ],
+
           // 手势控制层（铺满全屏，留出系统手势边距，透明响应）
           if (_imageBytes != null)
             Positioned.fill(
@@ -254,14 +397,20 @@ class _PhotoFullscreenPageState extends State<PhotoFullscreenPage>
                 padding: const EdgeInsets.only(
                   left: 12, right: 12, top: 40, bottom: 20,
                 ),
-                child: GestureDetector(
-                  onScaleStart: _onScaleStart,
-                  onScaleUpdate: _onScaleUpdate,
-                  onScaleEnd: _onScaleEnd,
-                  onDoubleTap: _onDoubleTap,
-                  onTap: _onTap,
-                  behavior: HitTestBehavior.opaque,
-                  child: const SizedBox.expand(),
+                child: Listener(
+                  onPointerUp: (_) {
+                    if (_isPlayingLive) _stopLivePlayback();
+                  },
+                  child: GestureDetector(
+                    onScaleStart: _onScaleStart,
+                    onScaleUpdate: _onScaleUpdate,
+                    onScaleEnd: _onScaleEnd,
+                    onDoubleTap: _onDoubleTap,
+                    onTap: _onTap,
+                    onLongPress: _isLivePhoto ? _onLongPress : null,
+                    behavior: HitTestBehavior.opaque,
+                    child: const SizedBox.expand(),
+                  ),
                 ),
               ),
             ),
@@ -276,27 +425,85 @@ class _PhotoFullscreenPageState extends State<PhotoFullscreenPage>
                       color: Colors.white54, size: 48),
             ),
 
-          // 顶部按钮 + 日期
+          // 顶部按钮 + 日期 + Live 标识
           Positioned(
             top: MediaQuery.of(context).padding.top + 8,
             left: 0, right: 0,
             child: AnimatedOpacity(
               opacity: uiOpacity,
               duration: const Duration(milliseconds: 150),
-              child: Row(
+              child: Stack(
+                alignment: Alignment.center,
                 children: [
-                  IconButton(
-                    icon: const Icon(Icons.close, color: Colors.white70),
-                    onPressed: () => Navigator.of(context).pop(),
-                  ),
-                  const Spacer(),
+                  // 日期居中
                   Text(
                     _formatDate(widget.photo.createDateTime),
                     style: const TextStyle(
                         color: Colors.white70, fontSize: 13, letterSpacing: 1),
                   ),
-                  const Spacer(),
-                  const SizedBox(width: 48),
+                  // 左侧：关闭 + LIVE 标识
+                  Positioned(
+                    left: 0,
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        IconButton(
+                          icon: const Icon(Icons.close, color: Colors.white70),
+                          onPressed: () => Navigator.of(context).pop(),
+                        ),
+                        if (_isLivePhoto)
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.08),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          SizedBox(
+                            width: 12, height: 12,
+                            child: Stack(
+                              alignment: Alignment.center,
+                              children: [
+                                // 外圈虚线圆
+                                CustomPaint(
+                                  size: const Size(12, 12),
+                                  painter: LiveDashedCirclePainter(
+                                    color: Colors.white54,
+                                    strokeWidth: 1,
+                                  ),
+                                ),
+                                // 内圈实线圆
+                                Container(
+                                  width: 6, height: 6,
+                                  decoration: BoxDecoration(
+                                    shape: BoxShape.circle,
+                                    border: Border.all(
+                                        color: Colors.white54,
+                                        width: 1),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: 3),
+                          Text(
+                            'LIVE',
+                            style: TextStyle(
+                              fontSize: 9,
+                              fontWeight: FontWeight.w500,
+                              color: Colors.white.withValues(alpha: 0.6),
+                              letterSpacing: 1,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                      ],
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -309,10 +516,10 @@ class _PhotoFullscreenPageState extends State<PhotoFullscreenPage>
             child: AnimatedOpacity(
               opacity: uiOpacity,
               duration: const Duration(milliseconds: 150),
-              child: const Center(
+              child: Center(
                 child: Text(
-                  '上划退出 · 双指缩放/旋转',
-                  style: TextStyle(
+                  '上下划退出 · 双指缩放/旋转',
+                  style: const TextStyle(
                       color: Colors.white38, fontSize: 12, letterSpacing: 1),
                 ),
               ),

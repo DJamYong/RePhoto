@@ -1,11 +1,12 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
-import 'dart:typed_data';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:exif/exif.dart';
 import 'package:photo_manager/photo_manager.dart';
 import 'dart:math';
+import '../services/motion_photo_service.dart';
 import '../services/photo_service.dart';
 import '../services/view_history_service.dart';
 import '../models/view_history.dart';
@@ -25,6 +26,7 @@ class RandomPhotoState {
   final Uint8List? preloadedThumbnail;
   final File? preloadedFile;
   final Map<String, IfdTag>? preloadedExif;
+  final Set<String> motionPhotoIds;
 
   const RandomPhotoState({
     this.photo,
@@ -37,6 +39,7 @@ class RandomPhotoState {
     this.preloadedThumbnail,
     this.preloadedFile,
     this.preloadedExif,
+    this.motionPhotoIds = const {},
   });
 
   RandomPhotoState copyWith({
@@ -50,6 +53,7 @@ class RandomPhotoState {
     Uint8List? preloadedThumbnail,
     File? preloadedFile,
     Map<String, IfdTag>? preloadedExif,
+    Set<String>? motionPhotoIds,
     bool clearPreload = false,
   }) {
     return RandomPhotoState(
@@ -63,6 +67,7 @@ class RandomPhotoState {
       preloadedThumbnail: clearPreload ? null : (preloadedThumbnail ?? this.preloadedThumbnail),
       preloadedFile: clearPreload ? null : (preloadedFile ?? this.preloadedFile),
       preloadedExif: clearPreload ? null : (preloadedExif ?? this.preloadedExif),
+      motionPhotoIds: motionPhotoIds ?? this.motionPhotoIds,
     );
   }
 }
@@ -166,24 +171,34 @@ class PhotoProvider extends AsyncNotifier<RandomPhotoState> {
       }
     }
 
-    // 记录浏览历史（碰撞检测之后，明确知晓是否碰撞）
+    // 记录浏览历史（非关键路径，失败不影响主流程）
     try {
       await ViewHistoryService.create(ViewHistory(
         photoId: photo.id,
         viewedAt: DateTime.now(),
-        isCollision: collision != null,
       ));
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('ViewHistory insert failed: $e');
+    }
     // 碰撞数据缓存到内存，供历史抽取使用
     if (collision != null) {
       _collisionCache[collision.currentPhoto.id] = collision;
     }
     _addToRecentQueue(photo.id, collision != null);
 
+    // 预检测动图：碰撞模式下提前标记 LIVE 图，翻页不卡
+    Set<String> motionPhotoIds = {};
+    if (collision != null) {
+      final allIds = collision.groups.values.expand((list) => list).map((p) => p.id).toList();
+      final results = await MotionPhotoService.batchCheck(photoIds: allIds);
+      motionPhotoIds = results.entries.where((e) => e.value).map((e) => e.key).toSet();
+    }
+
     return RandomPhotoState(
       photo: photo,
       hasPermission: true,
       collision: collision,
+      motionPhotoIds: motionPhotoIds,
       selectedYear: collision?.selectedYear ?? 0,
     );
   }
@@ -191,7 +206,13 @@ class PhotoProvider extends AsyncNotifier<RandomPhotoState> {
   /// 强制加载一张具有时间对撞数据的照片（测试用）
   Future<void> loadCollisionPhoto() async {
     final granted = await _photoService.requestPermission();
-    if (!granted) return;
+    if (!granted) {
+      state = AsyncData(const RandomPhotoState(
+        hasPermission: false,
+        errorMessage: '需要相册权限',
+      ));
+      return;
+    }
 
     final gen = ++_generation;
     // 遍历缓存找到有同月同日匹配的照片
@@ -204,11 +225,17 @@ class PhotoProvider extends AsyncNotifier<RandomPhotoState> {
       return;
     }
 
+    // 预检测动图
+    final allIds = collision.groups.values.expand((list) => list).map((p) => p.id).toList();
+    final results = await MotionPhotoService.batchCheck(photoIds: allIds);
+    final motionIds = results.entries.where((e) => e.value).map((e) => e.key).toSet();
+
     final state2 = RandomPhotoState(
       photo: collision.currentPhoto,
       hasPermission: true,
       collision: collision,
       selectedYear: collision.selectedYear,
+      motionPhotoIds: motionIds,
     );
     state = AsyncData(state2);
 
@@ -249,35 +276,72 @@ class PhotoProvider extends AsyncNotifier<RandomPhotoState> {
     _preloadCurrentPhoto(photo);
   }
 
+  /// 加载一张随机 Live Photo（测试用）
+  Future<void> loadLivePhoto() async {
+    final granted = await _photoService.requestPermission();
+    if (!granted) return;
+
+    ++_generation;
+    final photo = await _photoService.findLivePhoto();
+    if (photo == null) {
+      state = AsyncData(RandomPhotoState(
+        hasPermission: true,
+        errorMessage: '没有找到 Live Photo',
+      ));
+      return;
+    }
+
+    state = AsyncData(RandomPhotoState(
+      photo: photo,
+      hasPermission: true,
+    ));
+
+    _preloadCurrentPhoto(photo);
+  }
+
   /// 按照片ID加载指定照片（历史抽取用）
   /// [isCollision] 为 true 时从内存缓存取碰撞数据，不查库
   Future<void> loadByPhotoId(String photoId, {bool isCollision = false}) async {
     var photo = await _photoService.getPhotoById(photoId);
     if (photo == null) return;
 
-    // 从内存缓存取碰撞数据（_collisionCache，session 级）
+    // 从内存缓存取碰撞数据，缓存未命中则重新推导
     TimeCollision? collision;
     if (isCollision) {
       collision = _collisionCache[photoId];
+      if (collision == null) {
+        collision = await _photoService.findAnyCollision();
+        if (collision != null) _collisionCache[photoId] = collision;
+      }
       if (collision != null) photo = collision.currentPhoto;
     }
 
-    // 记录浏览历史
+    // 记录浏览历史（非关键路径，失败不影响主流程）
     try {
       await ViewHistoryService.create(ViewHistory(
         photoId: photo.id,
         viewedAt: DateTime.now(),
-        isCollision: collision != null,
       ));
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('ViewHistory insert failed: $e');
+    }
 
     _addToRecentQueue(photo.id, collision != null);
+
+    // 预检测动图
+    Set<String> motionIds = {};
+    if (collision != null) {
+      final allIds = collision.groups.values.expand((list) => list).map((p) => p.id).toList();
+      final results = await MotionPhotoService.batchCheck(photoIds: allIds);
+      motionIds = results.entries.where((e) => e.value).map((e) => e.key).toSet();
+    }
 
     state = AsyncData(RandomPhotoState(
       photo: photo,
       hasPermission: true,
       collision: collision,
       selectedYear: collision?.selectedYear ?? 0,
+      motionPhotoIds: motionIds,
     ));
     _preloadCurrentPhoto(photo);
   }

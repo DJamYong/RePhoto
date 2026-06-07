@@ -1,6 +1,7 @@
 import 'dart:math';
 import 'package:photo_manager/photo_manager.dart';
 import '../models/time_collision.dart';
+import 'motion_photo_service.dart';
 
 /// 相册服务 — 封装相册权限请求与随机照片选取
 class PhotoService {
@@ -241,6 +242,45 @@ class PhotoService {
 
     if (candidates.isEmpty) return null;
     return candidates[Random().nextInt(candidates.length)];
+  }
+
+  /// 查找一张随机 Live Photo（用于测试）
+  Future<AssetEntity?> findLivePhoto() async {
+    if (_cachedPhotos == null) {
+      final allAlbum = await _getAllAlbum();
+      if (allAlbum == null) return null;
+      _cachedCount = await allAlbum.assetCountAsync;
+      if (_cachedCount == 0) return null;
+      _cachedPhotos = await allAlbum.getAssetListRange(start: 0, end: _cachedCount!);
+    }
+
+    // 1) 本地条件：iOS Live Photo + GIF
+    final localCandidates = _cachedPhotos!.where((p) {
+      if (p.isLivePhoto) return true;
+      final mime = p.mimeType?.toLowerCase() ?? '';
+      if (mime == 'image/gif') return true;
+      return false;
+    }).toList();
+    if (localCandidates.isNotEmpty) {
+      return localCandidates[Random().nextInt(localCandidates.length)];
+    }
+
+    // 2) Android：随机抽最多 500 张批量检测（不再读文件，极快）
+    final rng = Random();
+    final indices = List.generate(_cachedPhotos!.length, (i) => i)..shuffle(rng);
+    final sampleSize = min(500, _cachedPhotos!.length);
+    final batchIds = indices.take(sampleSize).map((i) => _cachedPhotos![i].id).toList();
+    final result = await MotionPhotoService.batchCheck(photoIds: batchIds);
+    for (final entry in result.entries) {
+      if (entry.value) {
+        return _cachedPhotos!.firstWhere(
+          (p) => p.id == entry.key,
+          orElse: () => throw StateError('unreachable'),
+        );
+      }
+    }
+
+    return null;
   }
 
   /// 删除指定照片（从设备相册中彻底移除）

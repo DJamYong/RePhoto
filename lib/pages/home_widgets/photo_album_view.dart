@@ -54,6 +54,7 @@ class _PhotoAlbumViewState extends State<_PhotoAlbumView> {
                           currentPhotoIndex: state.currentPhotoIndex,
                           onSelectYear: (y) => ref.read(photoProvider.notifier).selectCollisionYear(y),
                           onPhotoChanged: (i) => ref.read(photoProvider.notifier).selectCollisionPhoto(i),
+                          motionPhotoIds: state.motionPhotoIds,
                         )
                       : _PolaroidCard(
                           photo: photo,

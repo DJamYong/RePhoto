@@ -12,6 +12,8 @@ import '../models/record.dart';
 import '../models/time_collision.dart';
 import '../services/record_service.dart';
 import '../services/database_service.dart';
+import '../services/motion_photo_service.dart';
+import '../widgets/live_dashed_circle_painter.dart';
 import '../services/photo_service.dart';
 import '../widgets/record_tile_widget.dart';
 import '../widgets/mood_selector.dart';
