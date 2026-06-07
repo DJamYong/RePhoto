@@ -195,6 +195,7 @@ class _PhotoAlbumViewState extends State<_PhotoAlbumView> {
     final formKey = GlobalKey<FormState>();
     int? selectedColor = editRecord?.color;
     String? selectedMood = editRecord?.mood;
+    var colorExpanded = false;
 
 
     await showDialog(
@@ -231,27 +232,65 @@ class _PhotoAlbumViewState extends State<_PhotoAlbumView> {
                       },
                       onClear: () => setDialogState(() => selectedMood = null),
                     ),
-                    const SizedBox(height: 16),
-                    Align(alignment: Alignment.centerLeft,
-                      child: Text('标签颜色', style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant.withValues(alpha: 0.7)))),
-                    const SizedBox(height: 8),
-                    Wrap(spacing: 10, runSpacing: 8,
-                      children: RecordColors.all.map((c) {
-                        final isSelected = selectedColor == c;
-                        return GestureDetector(
-                          onTap: () => setDialogState(() => selectedColor = c),
-                          child: Container(width: 32, height: 32,
-                            decoration: BoxDecoration(
-                              color: c != null ? Color(c) : Colors.transparent,
-                              shape: BoxShape.circle,
-                              border: Border.all(color: isSelected ? cs.primary : cs.outlineVariant.withValues(alpha: 0.3), width: isSelected ? 2.5 : 1.5),
+                    const SizedBox(height: 12),
+                    InkWell(
+                      borderRadius: BorderRadius.circular(10),
+                      onTap: () => setDialogState(() => colorExpanded = !colorExpanded),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.3)),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(Icons.palette_outlined, size: 18, color: cs.primary.withValues(alpha: 0.7)),
+                            if (selectedColor != null) ...[
+                              const SizedBox(width: 8),
+                              Container(width: 16, height: 16,
+                                decoration: BoxDecoration(color: Color(selectedColor!), shape: BoxShape.circle)),
+                            ],
+                            const SizedBox(width: 8),
+                            Text(
+                              selectedColor != null ? '' : '选择颜色…',
+                              style: TextStyle(fontSize: 14,
+                                  color: selectedColor != null ? cs.onSurface : cs.onSurfaceVariant.withValues(alpha: 0.5)),
                             ),
-                            child: c == null
-                                ? Icon(Icons.close, size: 14, color: cs.onSurfaceVariant.withValues(alpha: 0.4))
-                                : (isSelected ? Icon(Icons.check, size: 16, color: Colors.white) : null),
-                          ),
-                        );
-                      }).toList(),
+                            const Spacer(),
+                            AnimatedRotation(
+                              turns: colorExpanded ? 0.25 : 0,
+                              duration: const Duration(milliseconds: 200),
+                              child: Icon(Icons.chevron_right, size: 18, color: cs.onSurfaceVariant.withValues(alpha: 0.5)),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    AnimatedSize(
+                      duration: const Duration(milliseconds: 200),
+                      child: colorExpanded
+                          ? Padding(
+                              padding: const EdgeInsets.only(top: 8),
+                              child: Wrap(spacing: 10, runSpacing: 8,
+                                children: RecordColors.all.map((c) {
+                                  final isSelected = selectedColor == c;
+                                  return GestureDetector(
+                                    onTap: () => setDialogState(() => selectedColor = c),
+                                    child: Container(width: 32, height: 32,
+                                      decoration: BoxDecoration(
+                                        color: c != null ? Color(c) : Colors.transparent,
+                                        shape: BoxShape.circle,
+                                        border: Border.all(color: isSelected ? cs.primary : cs.outlineVariant.withValues(alpha: 0.3), width: isSelected ? 2.5 : 1.5),
+                                      ),
+                                      child: c == null
+                                          ? Icon(Icons.close, size: 14, color: cs.onSurfaceVariant.withValues(alpha: 0.4))
+                                          : (isSelected ? Icon(Icons.check, size: 16, color: Colors.white) : null),
+                                    ),
+                                  );
+                                }).toList(),
+                              ),
+                            )
+                          : const SizedBox(width: double.infinity, height: 0),
                     ),
                   ],
                 ),
@@ -376,8 +415,6 @@ class _PhotoAlbumViewState extends State<_PhotoAlbumView> {
     overlay.insert(entry);
   }
 
-  /// 弹出全部记录列表
-  /// 弹出近24小时浏览记录列表
   void _showHistoryDialog(BuildContext context) async {
     final entries = ref.read(photoProvider.notifier).getRecentHistory();
     if (entries.isEmpty) {

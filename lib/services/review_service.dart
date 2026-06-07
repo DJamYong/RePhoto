@@ -61,16 +61,18 @@ class ReviewService {
   }
 
   /// 每日记录数（日历热力图数据）
-  static Future<Set<int>> getRecordDays(int year, int month) async {
+  static Future<Map<int, int>> getRecordDays(int year, int month) async {
     final cached = await ReviewCacheService.getRecordDays(year, month);
     if (cached != null) return cached;
 
     final (start, end) = _monthRange(year, month);
     final rows = await DatabaseService.db.rawQuery('''
-      SELECT DISTINCT CAST(strftime('%d', created_at) AS INTEGER) AS day
+      SELECT CAST(strftime('%d', created_at) AS INTEGER) AS day, COUNT(*) AS cnt
       FROM records WHERE created_at >= ? AND created_at < ?
+      GROUP BY day
     ''', [start, end]);
-    final result = rows.map((r) => r['day'] as int).toSet();
+    final result = <int, int>{};
+    for (final r in rows) { result[r['day'] as int] = r['cnt'] as int; }
     await ReviewCacheService.setRecordDays(year, month, result);
     return result;
   }
@@ -129,9 +131,9 @@ class ReviewService {
   }
 
   /// 最大连续记录天数
-  static int maxConsecutiveDays(Set<int> days) {
+  static int maxConsecutiveDays(Map<int, int> days) {
     if (days.isEmpty) return 0;
-    final sorted = days.toList()..sort();
+    final sorted = days.keys.toList()..sort();
     var maxStreak = 1;
     var current = 1;
     for (var i = 1; i < sorted.length; i++) {

@@ -29,7 +29,7 @@ class _MonthlyReviewPageState extends State<MonthlyReviewPage> {
   int _currentPage = 0;
   Map<String, int>? _overview;
   List<MapEntry<int, int>>? _dailyViews;
-  Set<int>? _recordDays;
+  Map<int, int>? _recordDays;
   List<MapEntry<String, int>>? _moods;
   List<MapEntry<String, int>>? _topPhotos;
   List<Record>? _records;
@@ -66,7 +66,7 @@ class _MonthlyReviewPageState extends State<MonthlyReviewPage> {
       setState(() {
         _overview = results[0] as Map<String, int>;
         _dailyViews = results[1] as List<MapEntry<int, int>>;
-        _recordDays = results[2] as Set<int>;
+        _recordDays = results[2] as Map<int, int>;
         _moods = results[3] as List<MapEntry<String, int>>;
         _topPhotos = results[4] as List<MapEntry<String, int>>;
         _records = results[5] as List<Record>;
@@ -441,7 +441,8 @@ class _BarChartPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     if (data.isEmpty) return;
     final barW = size.width / 31;
-    final chartH = size.height - 20;
+    final labelPad = 14.0; // 顶部留空给数值标注
+    final chartH = size.height - 20 - labelPad;
 
     // 网格线
     final gridPaint = Paint()..color = gridColor;
@@ -478,7 +479,7 @@ class _BarChartPainter extends CustomPainter {
 // ═══════════════════════════════════════
 
 class _CalendarPage extends StatelessWidget {
-  final Set<int> recordDays;
+  final Map<int, int> recordDays;
   final ColorScheme cs;
   const _CalendarPage({required this.recordDays, required this.cs});
 
@@ -509,14 +510,18 @@ class _CalendarPage extends StatelessWidget {
               itemCount: 31,
               itemBuilder: (_, i) {
                 final day = i + 1;
-                final hasRecord = recordDays.contains(day);
+                final count = recordDays[day] ?? 0;
+                final maxCount = recordDays.isEmpty ? 1 : recordDays.values.reduce(max);
+                final alpha = count > 0 ? (0.25 + (count / maxCount) * 0.65).clamp(0.0, 0.9) : 0.0;
                 return Container(
                   decoration: BoxDecoration(
-                    color: hasRecord ? cs.primary.withValues(alpha: 0.5) : cs.surfaceContainerHighest.withValues(alpha: 0.2),
+                    color: count > 0
+                        ? cs.primary.withValues(alpha: alpha)
+                        : cs.surfaceContainerHighest.withValues(alpha: 0.2),
                     borderRadius: BorderRadius.circular(6),
                   ),
                   child: Center(
-                    child: Text('$day', style: TextStyle(fontSize: 12, color: hasRecord ? cs.onPrimary : cs.onSurfaceVariant)),
+                    child: Text('$day', style: TextStyle(fontSize: 12, color: count > 0 ? cs.onPrimary : cs.onSurfaceVariant)),
                   ),
                 );
               },

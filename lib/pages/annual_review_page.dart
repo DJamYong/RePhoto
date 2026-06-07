@@ -422,7 +422,8 @@ class _ChartPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     if (data.isEmpty) return;
     final barW = size.width / 12;
-    final chartH = size.height - 20;
+    final labelPad = 14.0;
+    final chartH = size.height - 20 - labelPad;
     final gridPaint = Paint()..color = gridColor;
     for (var i = 0; i <= 4; i++) {
       final y = size.height - 20 - (chartH / 4) * i;

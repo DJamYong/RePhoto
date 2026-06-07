@@ -63,17 +63,20 @@ class ReviewCacheService {
         jsonEncode(data.map((e) => {'k': e.key, 'v': e.value}).toList()));
   }
 
-  /// 有记录的天数集合
-  static Future<Set<int>?> getRecordDays(int year, int month) async {
+  /// 有记录的天数 → 每天记录数
+  static Future<Map<int, int>?> getRecordDays(int year, int month) async {
     final raw = await _read('rd', year, month);
     if (raw == null) return null;
     final list = jsonDecode(raw) as List;
-    return list.cast<int>().toSet();
+    final map = <int, int>{};
+    for (final e in list) { map[e['k'] as int] = e['v'] as int; }
+    return map;
   }
 
   static Future<void> setRecordDays(
-      int year, int month, Set<int> data) async {
-    await _write('rd', year, month, jsonEncode(data.toList()));
+      int year, int month, Map<int, int> data) async {
+    final list = data.entries.map((e) => {'k': e.key, 'v': e.value}).toList();
+    await _write('rd', year, month, jsonEncode(list));
   }
 
   /// 情绪分布
